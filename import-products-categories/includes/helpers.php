@@ -11,7 +11,7 @@ function mpi_download_image_to_media($url, $title = '')
     if (is_wp_error($tmp)) return false;
 
     $file_array = [
-        'name'     => basename($url),
+        'name' => basename($url),
         'tmp_name' => $tmp
     ];
 
@@ -34,4 +34,26 @@ function get_type($index)
     ];
 
     return $types[$index];
+}
+
+/**
+ * @return string
+ * ww_tvc_get_bulk_pricing_db_table_name
+ */
+function ww_tvc_get_bulk_pricing_db_table_name()
+{
+    return 'tvc_product_bulk_pricing';
+}
+
+
+/**
+ * @return string
+ * ww_tvc_get_manufacturer_product_relation_table_name
+ * This table will container
+ * brand*product relation
+ * model*product relation
+ */
+function ww_tvc_get_manufacturer_product_relation_table_name()
+{
+    return 'tvc_manufacturer_product_relation';
 }
