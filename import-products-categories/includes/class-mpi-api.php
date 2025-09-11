@@ -11,7 +11,7 @@ class MPI_API
             return $cached_token;
         }
 
-        $auth_url = TVC_BASE_URL . "/Authorization/GetAuthorization?TVC_EMAIL=" . urlencode(TVC_EMAIL) . "&TVC_PASSWORD=" . urlencode(TVC_PASSWORD);
+        $auth_url = TVC_BASE_URL . "/Authorization/GetAuthorization?EMAIL=" . urlencode(TVC_EMAIL) . "&PASSWORD=" . urlencode(TVC_PASSWORD);
 
         $response = wp_remote_get($auth_url, [
             'headers' => ['Content-Type' => 'application/json'],

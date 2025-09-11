@@ -3,7 +3,18 @@
     <p>Select a category to fetch products from API:</p>
 
     <form method="post" id="mpi-category-form">
-        <?php wp_nonce_field('mpi_import_nonce'); ?>
+        <?php 
+            wp_nonce_field('mpi_import_nonce');
+            
+            if (isset($_POST['sync_type']) && $_POST['sync_type'] == 'products') {
+                echo '<div class="updated"><p>✅ Products data has been updated.</p></div>';
+            }
+
+            if (isset($_POST['sync_type']) && $_POST['sync_type'] == 'product_cat') {
+                echo '<div class="updated"><p>✅ Category data has been updated.</p></div>';
+            }
+        ?>
+
 
         <div>
             <label for="sync_type">Select Sync Type</label><select required name="sync_type" id="sync_type" style="margin-bottom:10px;">
@@ -195,13 +206,25 @@ function ww_import_categories_to_wc($categories, $parent_id = 0)
     }
 }
 
+// Always register this, even if no sync request is running
+// add_action( 'insert_product_job', 'handle_insert_product_job', 10, 1 );
+
+// function handle_insert_product_job( $productData ) {
+//     mpi_log('Product job running: ' . print_r($productData, true));
+// }
+
+// function dispatch_product_jobs( $products ) {
+//     // foreach ( $products as $product ) {
+//         as_schedule_single_action(time() + 5, 'insert_product_job', [ $product ] );
+//     // }
+// }
+
 if (isset($_POST['parent_category_code'])) {
     if (isset($_POST['category_code']) && !empty($_POST['category_code'])) {
         $categoryCode = sanitize_text_field($_POST['category_code']);
     } else {
         $categoryCode = sanitize_text_field($_POST['parent_category_code']);
     }
-
 
     $importer = new MPI_Importer();
     $api = new MPI_API();
@@ -221,7 +244,12 @@ if (isset($_POST['parent_category_code'])) {
 
         do {
             $products = $api->get_products_by_category_code($categoryCode, $lastProductId, $perPage, $pageIndex, $beginDate, $endDate);
-            $importer->get_detail_of_products($products);
+            //dispatch_product_jobs($products);
+
+            // foreach ($products['ProductItemNoList'] as $index => $product) {
+            //     wp_schedule_single_event( time() + ($index * 10), 'insert_tvc_product', [ $product['ItemNo'] ] );
+            // }
+
             $lastProductId = $products['lastProductId'];
 
             $pageIndex++;
@@ -244,27 +272,5 @@ if (isset($_POST['parent_category_code'])) {
     } else {
         echo "Product Sync ype is not set";
     }
-
-
-//    $categories = $api->get_categories_from_api($categoryCode);
-//    if (!empty($categories['CateoryList'])) {
-//        if (empty($categories['CateoryList'][0]['ParentCode'])) {
-//            $importer->import_categories($categories);
-//        } else if (isset($_POST['parent_category_code']) && (isset($_POST['category_code']) || $_POST['category_code'] == "")) {
-//            $importer->import_categories($categories);
-//        } else if (isset($_POST['category_code'])) {
-//            $importer->import_categories($categories);
-//        }
-//        // foreach ($categories['CateoryList'] as $categoryList) {
-//        //     if (!empty($categoryList['ParentCode'])) {
-//        //         // $categories = get_categories_from_api($categoryList['Code']);
-//        //         $imoportCategories = import_categories($categories);
-//        //         print_r($categoryList);
-//        //     }
-//        // }
-//
-//    } else {
-//        $products = $api->get_products_by_category_code($categoryCode);
-//        $importer->get_detail_of_products($products);
-//    }
 }
+

@@ -214,6 +214,16 @@ function add_dynamic_category_commission($cart) {
     }
 }
 
+// foreach ( [1, 2] as $index => $product ) {
+//     wp_schedule_single_event( time() + ( $index * 10 ), 'insert_single_product', [ $product ] );
+// }
+
+// add_action( 'insert_single_product', function( $product ) {
+    
+// });
+
+
+
 
 // === Includes ===
 require_once TVC_MPI_PLUGIN_PATH . 'includes/class-mpi-admin.php';
