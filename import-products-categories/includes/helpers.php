@@ -57,3 +57,30 @@ function ww_tvc_get_manufacturer_product_relation_table_name()
 {
     return 'tvc_manufacturer_product_relation';
 }
+
+/**
+ * Check if a WooCommerce product category exists by meta key
+ *
+ * @param string $code  The value of _tvc_product_cat_code to search for.
+ * @return int|false    Term ID if found, false if not found.
+ */
+function category_exists_by_code( $code ) {
+    $term = get_terms( array(
+        'taxonomy'   => 'product_cat',
+        'hide_empty' => false,
+        'meta_query' => array(
+            array(
+                'key'   => '_tvc_product_cat_code',
+                'value' => $code,
+            )
+        ),
+        'number' => 1, // limit to 1 for performance
+        'fields' => 'ids'
+    ) );
+
+    if ( ! empty( $term ) && ! is_wp_error( $term ) ) {
+        return $term[0]; // return term_id
+    }
+
+    return false;
+}

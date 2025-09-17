@@ -7,6 +7,10 @@ class MPI_Importer
     public function __construct()
     {
         add_action('init', [$this, 'register_custom_taxonomies']);
+
+        add_action( 'wp_ajax_product_fetch', [ $this, 'ww_ajax_product_save_update' ] );
+        // For non-logged-in users
+        add_action( 'wp_ajax_nopriv_product_fetch', [ $this, 'ww_ajax_product_save_update' ] );
     }
 
     public function register_custom_taxonomies()
@@ -72,122 +76,186 @@ class MPI_Importer
         }
     }
 
-    public function mpi_import_products($products)
+    /**
+     * @param $products
+     * @return true
+     * Update Product Details
+     */
+    function ww_update_detail_of_products($products)
     {
+        global $wpdb;
+
+        $count = 0;
         foreach ($products['ProductItemNoList'] as $p) {
+            $brandIds = [];
+            $modelIds = [];
+
             $sku = $p['ItemNo'];
-            $product_id = wc_get_product_id_by_sku($sku);
 
-            if ($product_id) {
-                // Update existing product
-                $product = wc_get_product($product_id);
-            } else {
-                // Create new simple product
-                $product = new WC_Product_Simple();
-                $product->set_sku($sku);
+            $body = $this->ww_tvc_get_products_by_sku($sku);
+            
+            $tvc_product_data = json_decode($body, true)['Detail'];
+            $model_list = json_decode($body, true)['ModelList'];
+
+            if (empty($tvc_product_data)) {
+                my_log_error('Empty Product'. $tvc_product_data);
+                continue;
             }
 
-            // Set product name (fallback to SKU if no name field in API)
-            $product->set_name("Product " . $p['ItemNo']);
+            if (function_exists('category_exists_by_code')) {
+                $checkCategory = category_exists_by_code($tvc_product_data['CategoryCode']);
 
-            // Map StockStatus (assuming 2 = in stock, else out of stock)
-            if ($p['StockStatus'] == 2) {
-                $product->set_stock_status('instock');
-            } else {
-                $product->set_stock_status('outofstock');
+                if (!$checkCategory) {
+                    my_log_error('Category Code does not exist'. $tvc_product_data['CategoryCode']);
+                    continue;
+                } 
             }
 
-            // Map ProductStatus (assuming 1 = publish, else draft)
-            if ($p['ProductStatus'] == 1) {
-                $product->set_status('publish');
-            } else {
-                $product->set_status('draft');
-            }
+            // Save base details
+            $product_id = $this->save_update_products($tvc_product_data, $sku);
 
-            // Save product
-            $new_product_id = $product->save();
+            $product = wc_get_product($product_id);
 
-            // Store extra data as meta
-            update_post_meta($new_product_id, '_api_product_id', $p['ProductId']);
-            update_post_meta($new_product_id, '_catalog_code', $p['CatalogCode']);
-            update_post_meta($new_product_id, '_publish_date', $p['PublishDate']);
-            update_post_meta($new_product_id, '_modified_date', $p['Modified']);
+            $this->update_tvc_products($p, $product_id, $tvc_product_data);
+
+            // Save update tvc product mapping
+            $this->update_additional_info($product_id, $tvc_product_data, $product, $model_list, $sku);
+
+            $count++;
         }
+
+        my_log_error('Product Inserted '. $count);
+
+        return true;
     }
 
-    public function insert_products_from_xml($products)
+    /**
+     * @param $product_id
+     * @param $tvc_product_data
+     * @param $product
+     * @param $model_list
+     * @return void
+     * Update Additional Details of Product
+     */
+    function update_additional_info($product_id, $tvc_product_data, $product, $model_list, $sku)
     {
-        foreach ($products as $p) {
-            $sku = $p['SKU'] ?? '';
-            $name = $p['name'] ?? 'Untitled';
-            $description = $p['description'] ?? '';
-            $price = $p['unit_price'] ?? 0;
-            $length = $p['length'] ?? '';
-            $width = $p['width'] ?? '';
-            $height = $p['height'] ?? '';
-            $weight = $p['weight'] ?? '';
-            $status = ($p['status'] == 1) ? 'publish' : 'draft';
-            $category = $p['category'] ?? '';
-            $images = !empty($p['images_urls']) ? explode(',', $p['images_urls']) : [];
+        $this->update_tvc_bulk_pricing_table($product_id, $tvc_product_data);
 
-            // ✅ Check if product exists by SKU
-            $product_id = wc_get_product_id_by_sku($sku);
-            if ($product_id) {
-                $product = wc_get_product($product_id);
-            } else {
-                $product = new WC_Product_Simple();
-                $product->set_sku($sku);
-            }
+        // Save Mapping of Compatible brand
+        $brandIds = $this->add_update_brand($tvc_product_data, $product_id);
 
-            // ✅ Basic fields
-            $product->set_name($name);
-            $product->set_description($description);
-            $product->set_regular_price($price);
-            $product->set_status($status);
-            $product->set_length($length);
-            $product->set_width($width);
-            $product->set_height($height);
-            $product->set_weight($weight);
+        // Save Mapping of Compatible Model
+        $modelIds = $this->add_update_models($tvc_product_data, $product_id);
 
-            // ✅ Assign category by name (create if not exists)
-            if (!empty($category)) {
-                $term = get_term_by('name', $category, 'product_cat');
-                if (!$term) {
-                    $new_term = wp_insert_term($category, 'product_cat');
-                    if (!is_wp_error($new_term)) {
-                        $term_id = $new_term['term_id'];
+        $this->ww_update_brand_model_relation($brandIds, $modelIds);
+
+        $this->add_update_attributes($tvc_product_data, $product_id, $product);
+
+        if (function_exists('aap_save_product_links')) {
+            $itemNo = [];
+            // Manage also available/variations:colors
+            if (isset($model_list) && !empty($model_list)) {
+                foreach ($model_list as $index => $data) {
+                    $modelSku = $data['ItemNo'];
+                    if ($modelSku != $sku) {
+                        $itemNo[] = $modelSku;
                     }
-                } else {
-                    $term_id = $term->term_id;
-                }
-                if (!empty($term_id)) {
-                    $product->set_category_ids([$term_id]);
-                }
-            }
 
-            // ✅ Save product first to get product_id
-            $product_id = $product->save();
-
-            // ✅ Handle images
-            if (!empty($images)) {
-                $image_ids = [];
-                foreach ($images as $i => $img_url) {
-                    $image_id = mpi_download_image_to_media($img_url, $sku . '-' . $i);
-                    if ($image_id) {
-                        $image_ids[] = $image_id;
+                    if ($index == 0) continue;
+                    $product_id_by_sku = wc_get_product_id_by_sku($modelSku);
+                    if ($product_id_by_sku) {
+                        $product = wc_get_product($product_id_by_sku);
+                        $product->set_catalog_visibility('search');
+                        $product->save();
                     }
+
+                    aap_save_product_links($product_id, [$product_id_by_sku]);
                 }
 
-                if (!empty($image_ids)) {
-                    $product->set_image_id($image_ids[0]); // main image
-                    $product->set_gallery_image_ids(array_slice($image_ids, 1)); // gallery
-                    $product->save();
-                }
+                update_post_meta($product_id, '_related_models', implode(',', $itemNo));
             }
         }
     }
 
-    function get_detail_of_products($products)
+    /**
+     * @return array
+     * Fetch Product save and update
+     */
+    function ww_ajax_product_save_update()
+    {
+        $sku = isset($_GET['sku']) ? sanitize_text_field($_GET['sku']) : '';
+        $redirect = isset($_GET['redirect']) ? filter_var($_GET['redirect'], FILTER_VALIDATE_BOOLEAN) : false;
+
+        $args = [
+            'post_type' => 'product',
+            'ww_updated' => 1,
+        ];
+
+        $body = $this->ww_tvc_get_products_by_sku($sku);
+        $product_data = json_decode($body, true)['Detail'] ?? [];
+        $model_list = json_decode($body, true)['ModelList'] ?? [];
+
+        // 🔹 Helper: handle error response/redirect
+        $handle_error = function ($msg) use ($redirect, $args) {
+            my_log_error($msg);
+
+            if ($redirect) {
+                $args['msg'] = $msg;
+                wp_safe_redirect(add_query_arg($args, admin_url('edit.php')));
+                exit;
+            }
+
+            wp_send_json_success([
+                'success' => false,
+                'data'    => $msg,
+            ]);
+            exit;
+        };
+
+        // If empty product
+        if (empty($product_data)) {
+            $handle_error('Empty Product: ' . $sku);
+        }
+
+        // If category check fails
+        if (function_exists('category_exists_by_code')) {
+            if (!category_exists_by_code($product_data['CategoryCode'])) {
+                $handle_error('Category Code does not exist: ' . $product_data['CategoryCode']);
+            }
+        }
+
+        // Save or update product
+        if ($product_id = $this->save_update_products($product_data, $sku)) {
+            $product = wc_get_product($product_id);
+
+            $this->update_additional_info($product_id, $product_data, $product, $model_list, $sku);
+
+            $msg = 'Product updated successfully';
+            my_log_error('Product updated: ' . $sku);
+
+            if ($redirect) {
+                $args['msg'] = $msg;
+                wp_safe_redirect(add_query_arg($args, admin_url('edit.php')));
+                exit;
+            }
+
+            wp_send_json_success([
+                'success' => true,
+                'message' => $msg,
+            ]);
+            exit;
+        }
+
+        // If not updated
+        $handle_error('Product not updated: ' . $sku);
+    }
+
+    /**
+     * @param $sku
+     * @return array
+     * Get Products by SKU
+     */
+    function ww_tvc_get_products_by_sku($sku)
     {
         $api = new MPI_API();
 
@@ -196,88 +264,34 @@ class MPI_Importer
             return ['error' => 'Failed to retrieve authentication token'];
         }
 
-        foreach ($products['ProductItemNoList'] as $p) {
-            $sku = $p['ItemNo'];
+        $api_url = TVC_BASE_URL . "/openapi/Product/Detail?ItemNo=" . urlencode($sku);
 
-            $api_url = TVC_BASE_URL . "/openapi/Product/Detail?ItemNo=" . urlencode($sku);
-            // $api_url = TVC_BASE_URL . "/OpenApi/Product/Detail_NewVersion?ItemNo=" . urlencode($sku);
+        $args = [
+            'headers' => [
+                'Accept' => 'application/json',
+                'Authorization' => 'TVC ' . $token,
+            ],
+            'timeout' => 30,
+        ];
 
-            $args = [
-                'headers' => [
-                    'Accept' => 'application/json',
-                    'Authorization' => 'TVC ' . $token,
-                ],
-                'timeout' => 30,
-            ];
+        $response = wp_remote_get($api_url, $args);
 
-            $response = wp_remote_get($api_url, $args);
-
-            if (is_wp_error($response)) {
-                return ['error' => $response->get_error_message()];
-            }
-
-            $body = wp_remote_retrieve_body($response);
-            $product_data = json_decode($body, true)['Detail'];
-            $model_list = json_decode($body, true)['ModelList'];
-
-            // api replace
-            if (empty($product_data)) {
-                continue;
-            }
-
-            // Save base details
-            $product_id = $this->save_update_products($product_data, $sku, $p);
-
-            // Save update tvc product mapping
-            $this->update_tvc_products($p, $product_id, $product_data);
-
-            // ww_tvc_print_r($p);
-            // ww_tvc_print_r($product_data);
-
-            // Save Bulk Pricing Slab
-            $this->update_tvc_bulk_pricing_table($product_id, $product_data);
-
-            // Save Mapping of Compatible brand
-            $this->add_update_brand($product_data, $product_id);
-
-            // Save Mapping of Compatible Model
-            $this->add_update_models($product_data, $product_id);
-
-            $this->add_update_attributes($product_data, $product_id);
-
-            $itemNo = [];
-            $postId = [];
-            // Manage also available/variations:colors
-            if (isset($model_list) && !empty($model_list)) {
-                foreach ($model_list as $index => $data) {
-                    $modelSku = $data['ItemNo'];
-
-                    if ($modelSku != $sku) {
-                        $itemNo[] = $modelSku;
-                    }
-
-                    // first vala visible
-                    if ($index == 0) continue;
-
-                    $product_id_by_sku = wc_get_product_id_by_sku($modelSku);
-                    // $postId[] = $product_id;
-                    if ($product_id_by_sku) {
-                        $product = wc_get_product($product_id_by_sku);
-                        $product->set_catalog_visibility('hidden');
-                        $product->save();
-                    }
-
-                    aap_save_product_links($product_id, [$product_id_by_sku]);
-                }
-                
-                update_post_meta( $product_id, '_related_models', implode(',', $itemNo));
-            }
+        if (is_wp_error($response)) {
+            return ['error' => $response->get_error_message()];
         }
 
-        return true;
+        $body = wp_remote_retrieve_body($response);
+
+        return $body;
     }
 
-    function save_update_products($product_data, $sku, $apiShortProduct = array())
+    /**
+     * @param $product_data
+     * @param $sku
+     * @return int
+     * Save and update Products
+     */
+    function save_update_products($product_data, $sku)
     {
         // 🔹 Example structure from API (adjust keys as needed)
         $name = $product_data['Name'] ?? 'Untitled';
@@ -328,10 +342,10 @@ class MPI_Importer
             }
         }
 
-       $urls = implode(',', $image_urls); 
+        $urls = implode(',', $image_urls);
 
         // Save media CDN
-        $product_image_url = $apiShortProduct['ImageUrl'] ?? '';
+        $product_image_url = $image_urls[0] ?? '';
         $product->update_meta_data('_tvc_image_url', $product_image_url);
         $product->update_meta_data('_tvc_extra_image_urls', $urls);
 
@@ -349,6 +363,13 @@ class MPI_Importer
         return $product_id;
     }
 
+    /**
+     * @param $data
+     * @param $postId
+     * @param $productData
+     * @return array
+     * Update Products
+     */
     function update_tvc_products($data, $postId, $productData)
     {
         global $wpdb;
@@ -372,16 +393,83 @@ class MPI_Importer
         );
 
         if ($result === false) {
-            error_log("❌ Insert failed for post_id {$postId} | DB error: " . $wpdb->last_error);
-            error_log("❌ Query: " . $wpdb->last_query);
-            error_log("❌ Data: " . print_r($row, true));
-        } else {
-            error_log("✅ Insert successful for post_id {$postId}");
+            my_log_error("❌ Insert failed for post_id {$postId} in tvc_products | DB error: " . $wpdb->last_error);
         }
 
         return $result;
     }
 
+    /**
+     * @param $brandIds
+     * @param $modelIds
+     * @return void
+     * Update Brand and Model relation
+     */
+    function ww_update_brand_model_relation($brandIds, $modelIds)
+    {
+        global $wpdb;
+
+        $brand_type_flag = 1;
+        $model_type_flag = 2;
+
+        if (!empty($brandIds)) {
+            foreach ($brandIds as $key => $id) {
+                $brand_exists = $wpdb->get_var(
+                    $wpdb->prepare(
+                        "SELECT COUNT(*) FROM wp_tvc_manufacturer_relation WHERE term_id = %d AND type = %d",
+                        $id,
+                        $brand_type_flag
+                    )
+                );
+
+                if (!$brand_exists) {
+                    $brandRow = [
+                        'term_id'   => (int) $id,
+                        'parent_id' => 0,
+                        'type'      => $brand_type_flag,
+                    ];
+    
+                    $wpdb->insert(
+                        'wp_tvc_manufacturer_relation',
+                        $brandRow,
+                        ['%d', '%d', '%d']
+                    );
+
+                    $lastId = $wpdb->insert_id;
+                } else {
+                    $lastId = $id;
+                }
+                
+                $model_exists = $wpdb->get_var(
+                    $wpdb->prepare(
+                        "SELECT COUNT(*) FROM wp_tvc_manufacturer_relation WHERE term_id = %d AND type = %d",
+                        $modelIds[$key],
+                        $model_type_flag
+                    )
+                );
+
+                if (!$model_exists) {
+                    $modelRow = [
+                        'term_id'   => (int) $modelIds[$key],
+                        'parent_id' => $lastId,
+                        'type'      => $model_type_flag,
+                    ];
+    
+                    $wpdb->insert(
+                        'wp_tvc_manufacturer_relation',
+                        $modelRow,
+                        ['%d', '%d', '%d']
+                    );
+                }
+            }
+        }
+    }
+
+    /**
+     * @param $sku
+     * @return string
+     * Get Tvc
+     */
     function tvc_get_extra_images($sku)
     {
         $api = new MPI_API();
@@ -412,7 +500,6 @@ class MPI_Importer
 
         return $product_data['Images']['ProductImages'];
     }
-
 
     /**
      * @param $postId
@@ -461,18 +548,20 @@ class MPI_Importer
     {
         global $wpdb;
         $table_name = $wpdb->prefix . ww_tvc_get_manufacturer_product_relation_table_name();
+        $brand_relation_table_name = $wpdb->prefix . ww_tvc_get_manufacturer_product_relation_table_name();
         $new_term = [];
-        if (empty($data['CompatibleList'])) {
-            return;
-        }
+        if (empty($data['CompatibleList'])) return;
+
         $brand_ids = array();
         $brand_taxonomy = 'product_brand';
+
         // ww_tvc_print_r($data['CompatibleList']);
         foreach ($data['CompatibleList'] as $list) {
             $brand_name = sanitize_text_field($list['Brand']);
             $brand_slug = sanitize_title($brand_name);
             //  Check if a brand exists
             $existing_term = get_term_by('slug', $brand_slug, $brand_taxonomy);
+
             if ($existing_term) {
                 // Update the existing brand (name, slug or description)
                 wp_update_term($existing_term->term_id, $brand_taxonomy, [
@@ -493,13 +582,13 @@ class MPI_Importer
             }
         }
 
-        // Manage hybrid brand sync
         $brand_type_flag = 1;
-        // Delete old entries for this post_id
+
         $wpdb->delete($table_name, array(
             'post_id' => $product_id,
             'type' => $brand_type_flag,
         ));
+
         if (!empty($brand_ids)) {
             $brand_ids = array_unique($brand_ids);
             foreach ($brand_ids as $brandId) {
@@ -508,6 +597,7 @@ class MPI_Importer
                     'type' => $brand_type_flag,
                     'term_id' => $brandId,
                 ];
+
                 $wpdb->insert(
                     $table_name,
                     $row,
@@ -515,8 +605,11 @@ class MPI_Importer
                 );
             }
         }
+
         // Sync wooCommerce
         wp_set_object_terms($product_id, $brand_ids, $brand_taxonomy);
+
+        return $brand_ids;
     }
 
     /**
@@ -595,43 +688,44 @@ class MPI_Importer
         // Make relation of product * product models
         // ww_tvc_print_r($compatibleModelList);
         wp_set_object_terms($product_id, $compatibleModelList, $model_taxonomy);
+
+        return $compatibleModelList;
     }
 
-    public function add_update_attributes($data, $product_id)
+    /**
+     * @param $data
+     * @param $product_id
+     * @param $product
+     * @return void
+     * Update attributes
+     */
+    public function add_update_attributes($data, $product_id, $product)
     {
-        if (empty($data['Attributes'])) {
-            return;
-        }
+        if (empty($data['Attributes'])) return;
 
-        $product = wc_get_product($product_id);
-
-        if (!$product) {
-            return;
-        }
+        if (!$product) return;
 
         $attributes_data = [];
 
         foreach ($data['SpecificationList'] as $attr) {
             $attr_name = sanitize_title($attr['Name']); // e.g. "Color"
             $attr_value = sanitize_text_field($attr['Value']); // e.g. "Red"
-            
-            if (!in_array($attr_name, ['color', 'material', 'packaging-type', 'colorstyle', 'quick-charge'])) {
-                continue;
-            }
+
+            if (!in_array($attr_name, ['color', 'material', 'packaging-type', 'colorstyle', 'quick-charge'])) continue;
 
             // WooCommerce attribute taxonomy key must start with pa_
             $taxonomy = 'pa_' . $attr_name;
 
-            // ✅ Create attribute taxonomy if it doesn’t exist
-            if (!taxonomy_exists($taxonomy)) {
-                register_taxonomy($taxonomy, ['product'], [
-                    'label' => __($attr_name, 'textdomain'),
-                    'hierarchical' => true,
-                    'show_ui' => true,
-                    'show_admin_column' => true,
-                    'rewrite' => ['slug' => $attr_name],
-                ]);
-            }
+                        // ✅ Create attribute taxonomy if it doesn’t exist
+            //            if (!taxonomy_exists($taxonomy)) {
+            //                register_taxonomy($taxonomy, ['product'], [
+            //                    'label' => __($attr_name, 'textdomain'),
+            //                    'hierarchical' => true,
+            //                    'show_ui' => true,
+            //                    'show_admin_column' => true,
+            //                    'rewrite' => ['slug' => $attr_name],
+            //                ]);
+            //            }
 
             // ✅ Insert term (attribute value) if not exists
             $term = get_term_by('name', $attr_value, $taxonomy);

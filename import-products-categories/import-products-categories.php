@@ -36,14 +36,17 @@ function ww_tvs_get_allowed_channel_product_cat_ids()
 function ww_tvs_get_allowed_channel_product_cats()
 {
     $cats = array();
-    $cats[] = array(
-        'code' => "C0067",
-        "name" => "Cell Phone Accessories",
-    );
-//    $cats[] = array(
-//        'code' => "C0037",
-//        "name" => "Cell Phone Cases",
-//    );
+    $cats[] = array('code' => "C0067", 'name' => "Cell Phone Accessories");
+    $cats[] = array('code' => "C0037", 'name' => "Cell Phone Cases");
+    $cats[] = array('code' => "C0060", 'name' => "Cell Phone Parts");
+    $cats[] = array('code' => "C0005", 'name' => "Consumer Electronics");
+    $cats[] = array('code' => "C0006", 'name' => "Computer & Networking");
+    $cats[] = array('code' => "C0010", 'name' => "Sports & Outdoors");
+    $cats[] = array('code' => "C0009", 'name' => "Home & Garden");
+    $cats[] = array('code' => "C0004", 'name' => "Car Accessories");
+    $cats[] = array('code' => "C0078", 'name' => "Smartwatch Accessories");
+    $cats[] = array('code' => "C0077", 'name' => "Jewelry");
+    $cats[] = array('code' => "C0092", 'name' => "Smart Publishing Level 1");
     return $cats;
 }
 
@@ -149,83 +152,132 @@ function ww_tvc_print_r($data = array(), $die = false)
     }
 }
 
-// Add field to category edit form
-add_action('product_cat_add_form_fields', 'add_category_commission_field');
-add_action('product_cat_edit_form_fields', 'edit_category_commission_field');
+// Custom error logger
+if (!function_exists('my_log_error')) {
+    function my_log_error($message)
+    {
+        // Path to wp-content/uploads directory
+        $upload_dir = wp_upload_dir();
 
-function add_category_commission_field($taxonomy) {
-    ?>
-    <div class="form-field">
-        <label for="cat_commission"><?php _e('Commission (%)', 'textdomain'); ?></label>
-        <input type="number" name="cat_commission" id="cat_commission" value="" step="0.01" min="0">
-        <p class="description"><?php _e('Enter commission percentage for this category.', 'textdomain'); ?></p>
-    </div>
-    <?php
-}
+        // Create a log file with date, e.g., custom-errors-2025-09-12.log
+        $date = date('Y-m-d');
+        $log_file = trailingslashit($upload_dir['basedir']) . "custom-errors-{$date}.log";
 
-function edit_category_commission_field($term) {
-    $commission = get_term_meta($term->term_id, 'cat_commission', true);
-    ?>
-    <tr class="form-field">
-        <th scope="row" valign="top"><label for="cat_commission"><?php _e('Commission (%)', 'textdomain'); ?></label></th>
-        <td>
-            <input type="number" name="cat_commission" id="cat_commission" value="<?php echo esc_attr($commission); ?>" step="0.01" min="0">
-            <p class="description"><?php _e('Enter commission percentage for this category.', 'textdomain'); ?></p>
-        </td>
-    </tr>
-    <?php
-}
+        // Format message with timestamp
+        $timestamp = date("Y-m-d H:i:s");
+        $formatted_message = "[{$timestamp}] " . print_r($message, true) . "\n";
 
-add_action('created_product_cat', 'save_category_commission_field');
-add_action('edited_product_cat', 'save_category_commission_field');
-
-function save_category_commission_field($term_id) {
-    if (isset($_POST['cat_commission'])) {
-        update_term_meta($term_id, 'cat_commission', sanitize_text_field($_POST['cat_commission']));
+        // Write to file (append mode)
+        error_log($formatted_message, 3, $log_file);
     }
 }
 
+// Add admin menu page
+add_action('admin_menu', function () {
+    add_menu_page(
+        'Error Logs',         // Page title
+        'Error Logs',         // Menu title
+        'manage_options',     // Capability
+        'custom-error-logs',  // Menu slug
+        'render_error_logs',  // Callback function
+        'dashicons-warning',  // Icon
+        100                   // Position
+    );
+});
 
-add_action('woocommerce_cart_calculate_fees', 'add_dynamic_category_commission');
+// Render the error log contents
+function render_error_logs()
+{
+    $upload_dir = wp_upload_dir();
+    $log_path = trailingslashit($upload_dir['basedir']);
 
-function add_dynamic_category_commission($cart) {
-    if (is_admin() && !defined('DOING_AJAX')) return;
+    // Get all log files starting with custom-errors-
+    $files = glob($log_path . 'custom-errors-*.log');
 
-    $total_commission = 0;
+    echo '<div class="wrap"><h1>Error Logs</h1>';
 
-    foreach ($cart->get_cart() as $cart_item) {
-        $product_id = $cart_item['product_id'];
-        $line_total = $cart_item['line_total'];
+    if (!empty($files)) {
+        echo '<h2>Select a log file:</h2>';
+        echo '<form method="get">';
+        echo '<input type="hidden" name="page" value="custom-error-logs">';
+        echo '<select name="log_date">';
+        foreach ($files as $file) {
+            $filename = basename($file);
+            $date = str_replace(array('custom-errors-', '.log'), '', $filename);
+            $selected = (isset($_GET['log_date']) && $_GET['log_date'] === $date) ? 'selected' : '';
+            echo '<option value="' . esc_attr($date) . '" ' . $selected . '>' . esc_html($date) . '</option>';
+        }
+        echo '</select> ';
+        submit_button('View Log', 'primary', '', false);
+        echo '</form>';
 
-        $categories = wp_get_post_terms($product_id, 'product_cat', ['fields' => 'ids']);
+        // Display the selected log
+        if (isset($_GET['log_date']) && !empty($_GET['log_date'])) {
+            $selected_date = sanitize_text_field($_GET['log_date']);
+            $selected_file = $log_path . "custom-errors-{$selected_date}.log";
 
-        foreach ($categories as $cat_id) {
-            $commission_rate = get_term_meta($cat_id, 'cat_commission', true);
+            if (file_exists($selected_file)) {
+                $logs = file_get_contents($selected_file);
+                echo '<h2>Logs for ' . esc_html($selected_date) . '</h2>';
+                echo '<pre style="background:#111;color:#0f0;padding:15px;max-height:600px;overflow:auto;border-radius:8px;">';
+                echo esc_html($logs);
+                echo '</pre>';
 
-            if (!empty($commission_rate)) {
-                $total_commission += ($line_total * ($commission_rate / 100));
-                break; // only apply first found commission category per product
+                // Clear log button
+                echo '<form method="post" style="margin-top:20px;">';
+                echo '<input type="hidden" name="log_date" value="' . esc_attr($selected_date) . '">';
+                submit_button('Clear Logs', 'delete', 'clear_logs');
+                echo '</form>';
+
+                // Handle clearing logs
+                if (isset($_POST['clear_logs']) && current_user_can('manage_options')) {
+                    $clear_date = sanitize_text_field($_POST['log_date']);
+                    $clear_file = $log_path . "custom-errors-{$clear_date}.log";
+                    file_put_contents($clear_file, "");
+                    echo '<div class="updated notice"><p>Logs cleared successfully.</p></div>';
+                    echo '<script>window.location.reload();</script>';
+                }
+            } else {
+                echo '<p>No logs found for this date.</p>';
             }
         }
+
+    } else {
+        echo '<p>No log files found.</p>';
     }
 
-    if ($total_commission > 0) {
-        $cart->add_fee(__('Category Commission', 'textdomain'), $total_commission, true);
+    echo '</div>';
+}
+
+// Add a new column to the Products admin list
+add_filter('manage_edit-product_columns', 'ww_custom_product_list_column');
+function ww_custom_product_list_column($columns)
+{
+    $columns['update_button'] = 'Action'; // Column header
+    return $columns;
+}
+
+// Add content to the custom column
+add_action('manage_product_posts_custom_column', 'ww_update_product_list_column_content', 10, 2);
+function ww_update_product_list_column_content($column, $post_id)
+{
+    if ($column === 'update_button') {
+        $sku = get_post_meta($post_id, '_sku', true);
+        $url = admin_url('admin-ajax.php?redirect=true&action=product_fetch&sku=' . $sku);
+        echo '<a href="' . esc_url($url) . '" class="button button-primary">Update</a>';
     }
 }
 
-// foreach ( [1, 2] as $index => $product ) {
-//     wp_schedule_single_event( time() + ( $index * 10 ), 'insert_single_product', [ $product ] );
-// }
-
-// add_action( 'insert_single_product', function( $product ) {
-    
-// });
-
-
-
+add_action('admin_notices', function () {
+    if (isset($_GET['ww_updated']) && $_GET['ww_updated'] == 1) {
+        echo '<div class="notice notice-success is-dismissible">
+                <p>' . $_GET['msg'] . '</p>
+              </div>';
+    }
+});
 
 // === Includes ===
+require __DIR__ . '/includes/views/automate-product-cat.php';
 require_once TVC_MPI_PLUGIN_PATH . 'includes/class-mpi-admin.php';
 require_once TVC_MPI_PLUGIN_PATH . 'includes/class-mpi-api.php';
 require_once TVC_MPI_PLUGIN_PATH . 'includes/class-mpi-importer.php';
@@ -242,4 +294,76 @@ add_action('plugins_loaded', function () {
 });
 
 
+/**
+ * Plugin Name: Assign Product to All Categories
+ * Description: Assigns a specific product to every WooCommerce product category (including empty ones).
+ */
+
+// Run this once (or hook to an admin action) and then remove/disable the plugin.
+add_action('init', function () {
+    return;
+
+    // 🔧 Replace with the actual product ID you want to update
+    $product_id = 123;  // e.g., 123 is the product's post ID
+
+    if (!$product_id) {
+        return;
+    }
+
+    // ✅ Get all product categories, including empty ones
+    $all_cats = get_terms(array(
+        'taxonomy' => 'product_cat',
+        'hide_empty' => false,
+        'fields' => 'ids',     // only need IDs
+    ));
+
+    if (empty($all_cats) || is_wp_error($all_cats)) {
+        error_log('No product categories found.');
+        return;
+    }
+
+    // ✅ Assign product to all categories
+    wp_set_post_terms($product_id, $all_cats, 'product_cat');
+
+    // Optional: log confirmation
+    error_log('Product ' . $product_id . ' assigned to categories: ' . implode(',', $all_cats));
+});
+
+function ww_delete_All_prodcuct_cat()
+{
+    add_action('init', function () {
+        if (!current_user_can('manage_woocommerce')) {
+            return; // Safety check
+        }
+
+        $terms = get_terms(array(
+            'taxonomy' => 'product_cat',
+            'hide_empty' => false,
+            'fields' => 'ids',
+        ));
+
+        if (empty($terms) || is_wp_error($terms)) {
+            error_log('No product_cat terms found.');
+            return;
+        }
+
+        foreach ($terms as $term_id) {
+            wp_delete_term($term_id, 'product_cat');
+        }
+
+        error_log('All product categories deleted.');
+    });
+}
+
+//ww_delete_All_prodcuct_cat();
+
+//add_action( 'woocommerce_before_main_content', function() {
+//    if ( is_shop() ) {
+//        wp_list_categories( array(
+//            'taxonomy'   => 'product_cat',
+//            'hide_empty' => false,  // 🔑 show empty categories
+//            'title_li'   => '',
+//        ) );
+//    }
+//}, 5 );
 

@@ -23,14 +23,24 @@ class MPI_Admin
         );
 
         add_menu_page(
-            __('XML Importer', 'import-products-categories'),
-            __('XML Importer', 'import-products-categories'),
+            __('Product Fetch By SKU', 'import-products-categories'),
+            __('Product Fetch By SKU', 'import-products-categories'),
             'manage_options',
-            'xml-importer',
-            [$this, 'render_xml_importer_page'],
-            'dashicons-upload',
-            27
+            'product-fetch-by-sku',
+            [$this, 'fetch_by_sku_admin_page'],
+            'dashicons-products',
+            26
         );
+
+        // add_menu_page(
+        //     __('XML Importer', 'import-products-categories'),
+        //     __('XML Importer', 'import-products-categories'),
+        //     'manage_options',
+        //     'xml-importer',
+        //     [$this, 'render_xml_importer_page'],
+        //     'dashicons-upload',
+        //     27
+        // );
     }
 
     public function enqueue_scripts($hook)
@@ -54,6 +64,11 @@ class MPI_Admin
         include TVC_MPI_PLUGIN_PATH . 'includes/views/admin-page.php';
     }
 
+    public function fetch_by_sku_admin_page()
+    {
+        include TVC_MPI_PLUGIN_PATH . 'includes/views/fetch_by_sku_admin_page.php';
+    }
+
     public function render_xml_importer_page()
     {
         include TVC_MPI_PLUGIN_PATH . 'includes/views/xml-importer-page.php';
@@ -67,7 +82,6 @@ class MPI_Admin
         $json_response = array();
 
         $slug = sanitize_text_field($_POST['slug']);
-//        $term = get_term_by('slug', $slug, 'product_cat');
         $term = ww_tvc_get_term_data_by_tvc_code($slug,'product_cat');
 
 
