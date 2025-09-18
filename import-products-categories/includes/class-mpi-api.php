@@ -57,8 +57,9 @@ class MPI_API
         return json_decode($body, true);
     }
 
-    public function get_products_by_category_code($categoryCode, $lastProductId = null, $perPage = 50, $pageIndex = 1, $beginDate = null, $endDate = null)
+    public function get_products_by_category_code($categoryCode, $lastProductId = null, $perPage = 30, $pageIndex = 1, $beginDate = null, $endDate = null)
     {
+
         $token = $this->mpi_get_auth_token();
         if (!$token) {
             return ['error' => 'Failed to retrieve authentication token'];
@@ -69,7 +70,7 @@ class MPI_API
                 . "&pageIndex=" . intval($pageIndex)
                 . "&CategoryCode=" . urlencode($categoryCode);
 
-        // If lastProductId is provided, add it to query
+        // If the lastProductId is provided, add it to the query
         if (!empty($lastProductId)) {
             $api_url .= "&lastProductId=" . urlencode($lastProductId);
         }
@@ -87,7 +88,7 @@ class MPI_API
                 'Accept'        => 'application/json',
                 'Authorization' => 'TVC ' . $token,
             ],
-            'timeout' => 30,
+            'timeout' => 360,
         ];
 
         $response = wp_remote_get($api_url, $args);

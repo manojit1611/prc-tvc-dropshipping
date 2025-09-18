@@ -8,9 +8,9 @@ class MPI_Importer
     {
         add_action('init', [$this, 'register_custom_taxonomies']);
 
-        add_action( 'wp_ajax_product_fetch', [ $this, 'ww_ajax_product_save_update' ] );
+        add_action('wp_ajax_product_fetch', [$this, 'ww_ajax_product_save_update']);
         // For non-logged-in users
-        add_action( 'wp_ajax_nopriv_product_fetch', [ $this, 'ww_ajax_product_save_update' ] );
+        add_action('wp_ajax_nopriv_product_fetch', [$this, 'ww_ajax_product_save_update']);
     }
 
     public function register_custom_taxonomies()
@@ -93,22 +93,21 @@ class MPI_Importer
             $sku = $p['ItemNo'];
 
             $body = $this->ww_tvc_get_products_by_sku($sku);
-            
-            $tvc_product_data = json_decode($body, true)['Detail'];
+
+            $tvc_product_data = json_decode($body, true)['Detail'] ?? array();
             $model_list = json_decode($body, true)['ModelList'];
 
             if (empty($tvc_product_data)) {
-                my_log_error('Empty Product'. $tvc_product_data);
+                my_log_error('Empty Product' . $tvc_product_data);
                 continue;
             }
 
             if (function_exists('category_exists_by_code')) {
                 $checkCategory = category_exists_by_code($tvc_product_data['CategoryCode']);
-
                 if (!$checkCategory) {
-                    my_log_error('Category Code does not exist'. $tvc_product_data['CategoryCode']);
+                    my_log_error('Category Code does not exist' . $tvc_product_data['CategoryCode']);
                     continue;
-                } 
+                }
             }
 
             // Save base details
@@ -124,7 +123,7 @@ class MPI_Importer
             $count++;
         }
 
-        my_log_error('Product Inserted '. $count);
+        my_log_error('Product Inserted ' . $count);
 
         return true;
     }
@@ -207,7 +206,7 @@ class MPI_Importer
 
             wp_send_json_success([
                 'success' => false,
-                'data'    => $msg,
+                'data' => $msg,
             ]);
             exit;
         };
@@ -297,6 +296,15 @@ class MPI_Importer
         $name = $product_data['Name'] ?? 'Untitled';
         $description = $product_data['Description'] ?? '';
         $short_description = $product_data['ShortDescription'] ?? '';
+        // append package list
+        if (isset($product_data['PackageList']) && !empty($product_data['PackageList'])) {
+            $short_description .= "<ul>";
+            foreach ($product_data['PackageList'] as $package) {
+                $short_description .= "<li>{$package}</li>";
+            }
+            $short_description .= "</ul>";
+        }
+
         $price = $product_data['Price'] ?? 0;
         $length = $product_data['Length'] ?? '';
         $width = $product_data['Width'] ?? '';
@@ -424,11 +432,11 @@ class MPI_Importer
 
                 if (!$brand_exists) {
                     $brandRow = [
-                        'term_id'   => (int) $id,
+                        'term_id' => (int)$id,
                         'parent_id' => 0,
-                        'type'      => $brand_type_flag,
+                        'type' => $brand_type_flag,
                     ];
-    
+
                     $wpdb->insert(
                         'wp_tvc_manufacturer_relation',
                         $brandRow,
@@ -439,7 +447,7 @@ class MPI_Importer
                 } else {
                     $lastId = $id;
                 }
-                
+
                 $model_exists = $wpdb->get_var(
                     $wpdb->prepare(
                         "SELECT COUNT(*) FROM wp_tvc_manufacturer_relation WHERE term_id = %d AND type = %d",
@@ -450,11 +458,11 @@ class MPI_Importer
 
                 if (!$model_exists) {
                     $modelRow = [
-                        'term_id'   => (int) $modelIds[$key],
+                        'term_id' => (int)$modelIds[$key],
                         'parent_id' => $lastId,
-                        'type'      => $model_type_flag,
+                        'type' => $model_type_flag,
                     ];
-    
+
                     $wpdb->insert(
                         'wp_tvc_manufacturer_relation',
                         $modelRow,
@@ -467,7 +475,7 @@ class MPI_Importer
 
     /**
      * @param $sku
-     * @return string
+     * @return mixed
      * Get Tvc
      */
     function tvc_get_extra_images($sku)
@@ -716,7 +724,7 @@ class MPI_Importer
             // WooCommerce attribute taxonomy key must start with pa_
             $taxonomy = 'pa_' . $attr_name;
 
-                        // ✅ Create attribute taxonomy if it doesn’t exist
+            // ✅ Create attribute taxonomy if it doesn’t exist
             //            if (!taxonomy_exists($taxonomy)) {
             //                register_taxonomy($taxonomy, ['product'], [
             //                    'label' => __($attr_name, 'textdomain'),

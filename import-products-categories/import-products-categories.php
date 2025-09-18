@@ -23,6 +23,21 @@ define('TVC_MPI_PLUGIN_PATH', plugin_dir_path(__FILE__));
 define('TVC_MPI_PLUGIN_URL', plugin_dir_url(__FILE__));
 
 /**
+ * Write messages to a dedicated log file: wp-content/tvc-sync.log
+ * Writes to wp-content/tvc-sync.log by default,
+ * or wp-content/tvc-sync-<type>.log if $type is provided.
+ */
+function tvc_sync_log($message, $type = "")
+{
+    $file = WP_CONTENT_DIR . '/tvc-sync.log';
+    if ($type) {
+        $file = WP_CONTENT_DIR . '/tvc-sync-' . $type . '.log';
+    }
+    $time = date('Y-m-d H:i:s');
+    error_log("[{$time}] {$message}\n", 3, $file);
+}
+
+/**
  * @return string[]
  * ww_tvs_get_allowed_channel_product_cat_ids
  * Return Allowed channel product ids
@@ -278,6 +293,7 @@ add_action('admin_notices', function () {
 
 // === Includes ===
 require __DIR__ . '/includes/views/automate-product-cat.php';
+require __DIR__ . '/includes/views/automate-products.php';
 require_once TVC_MPI_PLUGIN_PATH . 'includes/class-mpi-admin.php';
 require_once TVC_MPI_PLUGIN_PATH . 'includes/class-mpi-api.php';
 require_once TVC_MPI_PLUGIN_PATH . 'includes/class-mpi-importer.php';

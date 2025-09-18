@@ -10,15 +10,6 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-/**
- * Write messages to a dedicated log file: wp-content/tvc-sync.log
- */
-function tvc_sync_log($message)
-{
-    $file = WP_CONTENT_DIR . '/tvc-sync.log';
-    $time = date('Y-m-d H:i:s');
-    error_log("[{$time}] {$message}\n", 3, $file);
-}
 
 /**
  * Fetch one level of categories from the external API.
@@ -55,7 +46,7 @@ function ww_import_category_level($parent_code = null, $parent_id = 0)
     }
 
     // Lock for a short period (2 min example)
-    set_transient($lock_key, 1, 120);
+    set_transient($lock_key, 1, 180);
 
     try {
         $categories = ww_get_categories_level($parent_code);

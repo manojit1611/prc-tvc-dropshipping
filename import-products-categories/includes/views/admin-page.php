@@ -234,23 +234,23 @@ if (isset($_POST['parent_category_code'])) {
     $parent_code = $categoryCode;
     $sync_type = $_POST['sync_type'] ?? '';
     if ($sync_type == 'products') {
-        $lastProductId = null;
+        // Action schedular for prodigious
+        ww_start_product_import($categoryCode);
 
-        $maxPages = 1; //
-        $pageIndex = 1; // Db offset
-        $perPage = 30;
-
-        // $beginDate = '2020-01-11T00:16:34';
-        // $endDate = '2020-01-15T00:16:34';
-
-        $beginDate = null;
-        $endDate = null;
-        do {
-            $products = $api->get_products_by_category_code($categoryCode, $lastProductId, $perPage, $pageIndex, $beginDate, $endDate);
-            $importer->ww_update_detail_of_products($products);
-            $lastProductId = $products['lastProductId'];
-            $pageIndex++;
-        } while ($pageIndex <= $maxPages);
+//        $lastProductId = null;
+//        $maxPages = 1; //
+//        $pageIndex = 1; // Db offset
+//        $perPage = 30;
+//        // $beginDate = '2020-01-11T00:16:34';
+//        // $endDate = '2020-01-15T00:16:34';
+//        $beginDate = null;
+//        $endDate = null;
+//        do {
+//            $products = $api->get_products_by_category_code($categoryCode, $lastProductId, $perPage, $pageIndex, $beginDate, $endDate);
+//            $importer->ww_update_detail_of_products($products);
+//            $lastProductId = $products['lastProductId'];
+//            $pageIndex++;
+//        } while ($pageIndex <= $maxPages);
 
     } elseif ($sync_type == 'product_cat') {
         // Fetch product cats
@@ -259,20 +259,12 @@ if (isset($_POST['parent_category_code'])) {
             ww_tvs_import_allowed_channel_product_cats();
             $existing_parent = ww_tvc_get_term_data_by_tvc_code($parent_code);
         }
-
-
 //        $categoriesTree = ww_tvc_rec_cats($parent_code);
 //        if (!empty($categoriesTree)) {
 //            ww_import_categories_to_wc($categoriesTree, $existing_parent->term_id);;
 //        }
-
         // Action Schedular
         ww_start_category_sync_now($parent_code, $existing_parent->term_id);;
-
-
-        echo '<pre>';
-        echo "Product Categories Imported Successfully";
-        echo '</pre>';
     } else {
         echo "Product Sync ype is not set";
     }
