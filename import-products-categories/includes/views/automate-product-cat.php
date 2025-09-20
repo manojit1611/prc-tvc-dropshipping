@@ -31,13 +31,13 @@ function ww_get_categories_level($parent_code = null)
  *
  * Hook: ww_import_child_level
  */
-function ww_import_category_level($parent_code = null, $parent_id = 0)
+function ww_import_category_level($batch_id, $parent_code = null, $parent_id = 0)
 {
     $parent_desc = $parent_code ? $parent_code : 'TOP-LEVEL';
     tvc_sync_log("Starting run for parent: {$parent_desc}");
 
     // Simple global lock to avoid concurrent runs
-//    $lock_key = 'tvc_sync_running';
+    // $lock_key = 'tvc_sync_running';
 
     $lock_key = 'tvc_sync_running_' . ($parent_code ?: 'root');
     if (get_transient($lock_key)) {
@@ -52,6 +52,8 @@ function ww_import_category_level($parent_code = null, $parent_id = 0)
         $categories = ww_get_categories_level($parent_code);
 
         if (empty($categories)) {
+            add_import_error_log($batch_id, $categories, "No categories found for parent: {$parent_desc}", 'category');
+
             tvc_sync_log("No categories found for parent: {$parent_desc}");
             delete_transient($lock_key);
             return;
@@ -62,6 +64,8 @@ function ww_import_category_level($parent_code = null, $parent_id = 0)
 
         foreach ($categories as $cat) {
             if (empty($cat['Name']) || empty($cat['Code'])) {
+                add_import_error_log($batch_id, $cat, "Skipped invalid cat record under parent: {$parent_desc}", 'category');
+
                 tvc_sync_log("Skipped invalid cat record under parent {$parent_desc}");
                 continue;
             }
@@ -116,10 +120,12 @@ function ww_import_category_level($parent_code = null, $parent_id = 0)
             $child_cats = ww_get_categories_level($code);
             if (!empty($child_cats)) {
                 $delay = 3 + ($i * 2); // small stagger
-                if (!wp_next_scheduled('ww_import_child_level', [$code, $term_id])) {
-                    wp_schedule_single_event(time() + $delay, 'ww_import_child_level', [$code, $term_id]);
+                if (!wp_next_scheduled('ww_import_child_level', [$batch_id, $code, $term_id])) {
+                    wp_schedule_single_event(time() + $delay, 'ww_import_child_level', [$batch_id, $code, $term_id]);
                     tvc_sync_log("Scheduled child import for code {$code} (term {$term_id}) with +{$delay}s delay");
                 } else {
+                    add_import_error_log($batch_id, $child_cats, "Child import already scheduled for code {$code} (term {$term_id}) — skipping", 'category');
+
                     tvc_sync_log("Child import already scheduled for code {$code} (term {$term_id}) — skipping");
                 }
             } else {
@@ -129,6 +135,8 @@ function ww_import_category_level($parent_code = null, $parent_id = 0)
             $i++;
         }
     } catch (Exception $e) {
+        add_import_error_log($batch_id, $categories, "Exception during import for parent {$parent_desc}: " . $e->getMessage(), 'category');
+        
         tvc_sync_log("Exception during import for parent {$parent_desc}: " . $e->getMessage());
     }
 
@@ -139,7 +147,7 @@ function ww_import_category_level($parent_code = null, $parent_id = 0)
 
 
 // Hook for scheduled child jobs
-add_action('ww_import_child_level', 'ww_import_category_level', 10, 2);
+add_action('ww_import_child_level', 'ww_import_category_level', 10, 3);
 
 /**
  * Start the full category sync (schedules the top-level run).
@@ -148,10 +156,11 @@ add_action('ww_import_child_level', 'ww_import_category_level', 10, 2);
 function ww_start_category_sync_now($parent_code = null, $parent_id = 0)
 {
     tvc_sync_log("Request to start full category sync.");
+    $batch_id = wp_generate_uuid4(); // globally unique
 
     // Avoid scheduling duplicate top-level job
-    if (!wp_next_scheduled('ww_import_child_level', [$parent_code, $parent_id])) {
-        wp_schedule_single_event(time(), 'ww_import_child_level', [$parent_code, $parent_id]);
+    if (!wp_next_scheduled('ww_import_child_level', [$batch_id, $parent_code, $parent_id])) {
+        wp_schedule_single_event(time(), 'ww_import_child_level', [$batch_id, $parent_code, $parent_id]);
         tvc_sync_log("Scheduled top-level job (now).");
     } else {
         tvc_sync_log("Top-level job already scheduled. Not scheduling again.");

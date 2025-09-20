@@ -57,9 +57,8 @@ class MPI_API
         return json_decode($body, true);
     }
 
-    public function get_products_by_category_code($categoryCode, $lastProductId = null, $perPage = 30, $pageIndex = 1, $beginDate = null, $endDate = null)
+    public function get_products_by_category_code($categoryCode = null, $lastProductId = null, $perPage = 30, $pageIndex = 1, $beginDate = null, $endDate = null)
     {
-
         $token = $this->mpi_get_auth_token();
         if (!$token) {
             return ['error' => 'Failed to retrieve authentication token'];
@@ -67,8 +66,11 @@ class MPI_API
 
         // Base API URL
         $api_url = TVC_BASE_URL . "/openapi/Product/Search?pageSize=" . intval($perPage)
-                . "&pageIndex=" . intval($pageIndex)
-                . "&CategoryCode=" . urlencode($categoryCode);
+                . "&pageIndex=" . intval($pageIndex);
+
+        if (!empty($categoryCode)) {
+            $api_url .= "&CategoryCode=" . urlencode($categoryCode);
+        }
 
         // If the lastProductId is provided, add it to the query
         if (!empty($lastProductId)) {
@@ -102,5 +104,4 @@ class MPI_API
 
         return $data;
     }
-
 }

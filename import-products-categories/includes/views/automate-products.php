@@ -18,8 +18,6 @@ if (!defined('ABSPATH')) exit;
  */
 function ww_import_product_batch($batch_id, $category_code = '', $page_index = 1, $last_product_id = null)
 {
-
-    // Unique lock per batch to allow many simultaneous imports.
     $lock_key = 'ww_product_sync_' . sanitize_key($batch_id);
     if (get_transient($lock_key)) {
         tvc_sync_log("Batch $batch_id already running—skipped page $page_index.", 'product');
@@ -40,20 +38,24 @@ function ww_import_product_batch($batch_id, $category_code = '', $page_index = 1
             $page_index
         );
 
+        $products = [];
+
         if (empty($products) || !empty($products['error'])) {
             tvc_sync_log(
                 "Batch $batch_id page $page_index error: " . print_r($products, true),
                 'product'
             );
+
+            add_import_error_log($batch_id, $products, 'Empty Products or API Error', 'product');
+            
             delete_transient($lock_key);
             return;
         } else {
             tvc_sync_log("Batch $batch_id products found to proceed." . count($products['ProductItemNoList']), 'product');
         }
 
-
         // Update WooCommerce products (your updater)
-        $importer->ww_update_detail_of_products($products);
+        $importer->ww_update_detail_of_products($products, $batch_id);
 
         if (!empty($products['lastProductId'])) {
             wp_schedule_single_event(
@@ -61,12 +63,13 @@ function ww_import_product_batch($batch_id, $category_code = '', $page_index = 1
                 'ww_import_product_batch',
                 [$batch_id, $category_code, $page_index + 1, $products['lastProductId']]
             );
+
             tvc_sync_log("Batch $batch_id scheduled next page " . ($page_index + 1), 'product');
         } else {
             tvc_sync_log("Batch $batch_id completed.", 'product');
         }
-
     } catch (Exception $e) {
+        add_import_error_log($batch_id, $products, $e->getMessage(), 'product');
         tvc_sync_log("Batch $batch_id exception: " . $e->getMessage(), 'product');
     }
 

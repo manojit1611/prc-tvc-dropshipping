@@ -81,46 +81,65 @@ class MPI_Importer
      * @return true
      * Update Product Details
      */
-    function ww_update_detail_of_products($products)
+    function ww_update_detail_of_products($products, $batch_id = null)
     {
         global $wpdb;
 
         $count = 0;
         foreach ($products['ProductItemNoList'] as $p) {
-            $brandIds = [];
-            $modelIds = [];
+            try {
+                $brandIds = [];
+                $modelIds = [];
+    
+                $sku = $p['ItemNo'];
+    
+                $body = $this->ww_tvc_get_products_by_sku($sku);
+    
+                $response = json_decode($body, true);
 
-            $sku = $p['ItemNo'];
+                // Safely get 'Detail'
+                $tvc_product_data = isset($response['Detail']) && is_array($response['Detail']) 
+                    ? $response['Detail'] 
+                    : [];
 
-            $body = $this->ww_tvc_get_products_by_sku($sku);
+                // Safely get 'ModelList'
+                if (isset($response['ModelList']) && is_array($response['ModelList'])) {
+                    $model_list = $response['ModelList'];
+                } else {
+                    add_import_error_log($batch_id, $tvc_product_data, 'Empty Model List', 'product');
 
-            $tvc_product_data = json_decode($body, true)['Detail'] ?? array();
-            $model_list = json_decode($body, true)['ModelList'];
+                    $model_list = [];
+                }
 
-            if (empty($tvc_product_data)) {
-                my_log_error('Empty Product' . $tvc_product_data);
-                continue;
-            }
-
-            if (function_exists('category_exists_by_code')) {
-                $checkCategory = category_exists_by_code($tvc_product_data['CategoryCode']);
-                if (!$checkCategory) {
-                    my_log_error('Category Code does not exist' . $tvc_product_data['CategoryCode']);
+                if (empty($tvc_product_data)) {
+                    add_import_error_log($batch_id, $tvc_product_data, 'Empty Product', 'product');
+    
+                    my_log_error('Empty Product' . $tvc_product_data);
                     continue;
                 }
+    
+                if (function_exists('category_exists_by_code')) {
+                    $checkCategory = category_exists_by_code($tvc_product_data['CategoryCode']);
+                    if (!$checkCategory) {
+                        add_import_error_log($batch_id, $tvc_product_data, 'Category Code does not exist', 'product');
+                        my_log_error('Category Code does not exist' . $tvc_product_data['CategoryCode']);
+                        continue;
+                    }
+                }
+    
+                // Save base details
+                $product_id = $this->save_update_products($tvc_product_data, $sku);
+    
+                $product = wc_get_product($product_id);
+    
+                $this->update_tvc_products($p, $product_id, $tvc_product_data);
+    
+                $this->update_additional_info($product_id, $tvc_product_data, $product, $model_list, $sku);
+    
+                $count++;
+            } catch (Exception $e) {
+                add_import_error_log($batch_id, $p['ItemNo'], $e->getMessage(), 'product');
             }
-
-            // Save base details
-            $product_id = $this->save_update_products($tvc_product_data, $sku);
-
-            $product = wc_get_product($product_id);
-
-            $this->update_tvc_products($p, $product_id, $tvc_product_data);
-
-            // Save update tvc product mapping
-            $this->update_additional_info($product_id, $tvc_product_data, $product, $model_list, $sku);
-
-            $count++;
         }
 
         my_log_error('Product Inserted ' . $count);
@@ -140,10 +159,8 @@ class MPI_Importer
     {
         $this->update_tvc_bulk_pricing_table($product_id, $tvc_product_data);
 
-        // Save Mapping of Compatible brand
         $brandIds = $this->add_update_brand($tvc_product_data, $product_id);
 
-        // Save Mapping of Compatible Model
         $modelIds = $this->add_update_models($tvc_product_data, $product_id);
 
         $this->ww_update_brand_model_relation($brandIds, $modelIds);
@@ -206,7 +223,7 @@ class MPI_Importer
 
             wp_send_json_success([
                 'success' => false,
-                'data' => $msg,
+                'data'    => $msg,
             ]);
             exit;
         };
@@ -292,25 +309,51 @@ class MPI_Importer
      */
     function save_update_products($product_data, $sku)
     {
-        // 🔹 Example structure from API (adjust keys as needed)
         $name = $product_data['Name'] ?? 'Untitled';
         $description = $product_data['Description'] ?? '';
         $short_description = $product_data['ShortDescription'] ?? '';
-        // append package list
-        if (isset($product_data['PackageList']) && !empty($product_data['PackageList'])) {
-            $short_description .= "<ul>";
-            foreach ($product_data['PackageList'] as $package) {
-                $short_description .= "<li>{$package}</li>";
-            }
-            $short_description .= "</ul>";
-        }
+
+        // if (isset($product_data['PackageList']) && !empty($product_data['PackageList'])) {
+        //     $short_description .= "<ul>";
+        //     foreach ($product_data['PackageList'] as $package) {
+        //         $short_description .= "<li>{$package}</li>";
+        //     }
+        //     $short_description .= "</ul>";
+        // }
 
         $price = $product_data['Price'] ?? 0;
         $length = $product_data['Length'] ?? '';
         $width = $product_data['Width'] ?? '';
         $height = $product_data['Height'] ?? '';
         $weight = $product_data['Weight'] ?? '';
+        $moq = $product_data['MOQ'] ?? '';
         $status = ($product_data['ProductStatus'] == 1) ? 'publish' : 'draft';
+        $stock_status_code = $product_data['StockStatus'] ?? 0;
+
+        switch ($stock_status_code) {
+            case 1:
+                $wc_stock_status = 'instock';
+                break;
+            case 2:
+                $wc_stock_status = 'on_sale'; // or custom 'on_sale' if you added
+                break;
+            case 3:
+                $wc_stock_status = 'in_shortage';
+                break;
+            case 4:
+                $wc_stock_status = 'outofstock';
+                break;
+            case 5:
+                $wc_stock_status = '5_7_days';
+                break;
+            case 7:
+                $wc_stock_status = '7_10_days';
+                break;
+            default:
+                $wc_stock_status = 'instock';
+                break;
+        }
+
         $category_slug = strtolower($product_data['CategoryCode'] ?? '');
         $product_id = wc_get_product_id_by_sku($sku);
         if ($product_id) {
@@ -331,6 +374,7 @@ class MPI_Importer
         $product->set_regular_price($price);
         $product->set_status($status);
         $product->set_short_description($short_description);
+        $product->set_stock_status($wc_stock_status);
 
         // 🔹 Dimensions & Weight
         $product->set_length($length);
@@ -366,7 +410,11 @@ class MPI_Importer
             }
         }
 
-        // 🔹 Save product
+        // 🔹 Save MOQ
+        if (!empty($moq)) {
+            $product->update_meta_data('_min_order_qty', $moq);
+        }
+
         $product_id = $product->save();
         return $product_id;
     }
@@ -432,11 +480,11 @@ class MPI_Importer
 
                 if (!$brand_exists) {
                     $brandRow = [
-                        'term_id' => (int)$id,
+                        'term_id'   => (int) $id,
                         'parent_id' => 0,
-                        'type' => $brand_type_flag,
+                        'type'      => $brand_type_flag,
                     ];
-
+    
                     $wpdb->insert(
                         'wp_tvc_manufacturer_relation',
                         $brandRow,
@@ -458,9 +506,9 @@ class MPI_Importer
 
                 if (!$model_exists) {
                     $modelRow = [
-                        'term_id' => (int)$modelIds[$key],
+                        'term_id'   => (int) $modelIds[$key],
                         'parent_id' => $lastId,
-                        'type' => $model_type_flag,
+                        'type'      => $model_type_flag,
                     ];
 
                     $wpdb->insert(
@@ -544,7 +592,6 @@ class MPI_Importer
         }
     }
 
-
     /**
      * @param $data
      * @param $product_id
@@ -558,7 +605,10 @@ class MPI_Importer
         $table_name = $wpdb->prefix . ww_tvc_get_manufacturer_product_relation_table_name();
         $brand_relation_table_name = $wpdb->prefix . ww_tvc_get_manufacturer_product_relation_table_name();
         $new_term = [];
-        if (empty($data['CompatibleList'])) return;
+        if (empty($data['CompatibleList'])) {
+            my_log_error('Empty CompatibleList ' . $product_id);
+            return;
+        }
 
         $brand_ids = array();
         $brand_taxonomy = 'product_brand';
@@ -630,8 +680,10 @@ class MPI_Importer
     public function add_update_models($data, $product_id)
     {
         if (empty($data['CompatibleList'])) {
+            my_log_error('Empty CompatibleList ' . $product_id);
             return;
         }
+
         global $wpdb;
         $table_name = $wpdb->prefix . ww_tvc_get_manufacturer_product_relation_table_name();
         $model_taxonomy = ww_tvs_get_product_model_taxonomy_type();
