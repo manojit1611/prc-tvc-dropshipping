@@ -13,34 +13,65 @@ class MPI_Admin
     public function add_admin_menu()
     {
         add_menu_page(
-            __('Product Importer', 'import-products-categories'),
-            __('Product Importer', 'import-products-categories'),
+            __('TVC', 'import-products-categories'), // Menu Title
+            __('TVC', 'import-products-categories'), // Page Title
             'manage_options',
-            'mpi-settings',
-            [$this, 'render_admin_page'],
-            'dashicons-products',
-            26
+            'tvc-main', // Slug for main page
+            [$this, 'render_admin_page'], // Callback for main page
+            'dashicons-products', // Icon
+            26 // Position
         );
 
-        add_menu_page(
+        // Submenu: Product Importer
+        add_submenu_page(
+            'tvc-main', // Parent slug
+            __('Product Pull', 'import-products-categories'), // Page title
+            __('Product Pull', 'import-products-categories'), // Menu title
+            'manage_options',
+            'product_page', // Slug
+            [$this, 'render_product_page'] // Callback
+        );
+
+        add_submenu_page(
+            'tvc-main', // Parent slug
+            __('Categories Pull', 'import-products-categories'), // Page title
+            __('Categories Pull', 'import-products-categories'), // Menu title
+            'manage_options',
+            'category_page', // Slug
+            [$this, 'render_category_page'] // Callback
+        );
+
+        // Submenu: Product Fetch By SKU
+        add_submenu_page(
+            'tvc-main',
             __('Product Fetch By SKU', 'import-products-categories'),
             __('Product Fetch By SKU', 'import-products-categories'),
             'manage_options',
             'product-fetch-by-sku',
-            [$this, 'fetch_by_sku_admin_page'],
-            'dashicons-products',
-            26
+            [$this, 'fetch_by_sku_admin_page']
         );
 
-        // add_menu_page(
-        //     __('XML Importer', 'import-products-categories'),
-        //     __('XML Importer', 'import-products-categories'),
-        //     'manage_options',
-        //     'xml-importer',
-        //     [$this, 'render_xml_importer_page'],
-        //     'dashicons-upload',
-        //     27
-        // );
+        // Submenu: Product Fetch By Date
+        add_submenu_page(
+            'tvc-main',
+            __('Product Fetch By Date', 'import-products-categories'),
+            __('Product Fetch By Date', 'import-products-categories'),
+            'manage_options',
+            'product-fetch-by-date',
+            [$this, 'fetch_by_date_admin_page']
+        );
+
+        add_submenu_page(
+            'tvc-main',
+            __('Logs', 'import-products-categories'),
+            __('Logs', 'import-products-categories'),
+            'manage_options',
+            'tvc-logs',
+            [$this, 'render_tvc_import_logs_page']
+        );
+        
+
+        remove_submenu_page('tvc-main', 'tvc-main');
     }
 
     public function enqueue_scripts($hook)
@@ -59,9 +90,14 @@ class MPI_Admin
         ]);
     }
 
-    public function render_admin_page()
+    public function render_product_page()
     {
-        include TVC_MPI_PLUGIN_PATH . 'includes/views/admin-page.php';
+        include TVC_MPI_PLUGIN_PATH . 'includes/views/product-pull-page.php';
+    }
+
+     public function render_category_page()
+    {
+        include TVC_MPI_PLUGIN_PATH . 'includes/views/category-pull-page.php';
     }
 
     public function fetch_by_sku_admin_page()
@@ -69,11 +105,10 @@ class MPI_Admin
         include TVC_MPI_PLUGIN_PATH . 'includes/views/fetch_by_sku_admin_page.php';
     }
 
-    public function render_xml_importer_page()
+    public function fetch_by_date_admin_page()
     {
-        include TVC_MPI_PLUGIN_PATH . 'includes/views/xml-importer-page.php';
+        include TVC_MPI_PLUGIN_PATH . 'includes/views/fetch_by_date_admin_page.php';
     }
-
 
     public function get_child_categories()
     {
@@ -118,5 +153,10 @@ class MPI_Admin
                 "success" => 0
             ));
         }
+    }
+
+    function render_tvc_import_logs_page()
+    {
+        include TVC_MPI_PLUGIN_PATH . 'includes/views/logs.php';
     }
 }

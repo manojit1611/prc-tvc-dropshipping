@@ -16,7 +16,7 @@ if (!defined('ABSPATH')) exit;
  * @param int $page_index Current page number.
  * @param string $last_product_id For APIs that require a lastProductId.
  */
-function ww_import_product_batch($batch_id, $category_code = '', $page_index = 1, $last_product_id = null)
+function ww_import_product_batch($batch_id, $category_code = '', $page_index = 1, $last_product_id = null, $beginDate = null, $endDate = null)
 {
     $lock_key = 'ww_product_sync_' . sanitize_key($batch_id);
     if (get_transient($lock_key)) {
@@ -35,10 +35,10 @@ function ww_import_product_batch($batch_id, $category_code = '', $page_index = 1
             $category_code,
             $last_product_id,
             $per_page,
-            $page_index
+            $page_index,
+            $beginDate,
+            $endDate
         );
-
-        $products = [];
 
         if (empty($products) || !empty($products['error'])) {
             tvc_sync_log(
@@ -46,7 +46,7 @@ function ww_import_product_batch($batch_id, $category_code = '', $page_index = 1
                 'product'
             );
 
-            add_import_error_log($batch_id, $products, 'Empty Products or API Error', 'product');
+            //add_import_error_log($batch_id, $products, 'Empty Products or API Error', 'product');
             
             delete_transient($lock_key);
             return;
@@ -69,9 +69,10 @@ function ww_import_product_batch($batch_id, $category_code = '', $page_index = 1
             tvc_sync_log("Batch $batch_id completed.", 'product');
         }
     } catch (Exception $e) {
-        add_import_error_log($batch_id, $products, $e->getMessage(), 'product');
         tvc_sync_log("Batch $batch_id exception: " . $e->getMessage(), 'product');
     }
+
+    
 
     delete_transient($lock_key);
 }
@@ -83,13 +84,13 @@ add_action('ww_import_product_batch', 'ww_import_product_batch', 10, 4);
  *
  * @param string $category_code Leave empty to fetch all products.
  */
-function ww_start_product_import($category_code = '')
+function ww_start_product_import($category_code = '', $beginDate = null, $endDate = null)
 {
     $batch_id = wp_generate_uuid4(); // globally unique
     wp_schedule_single_event(
         time(),
         'ww_import_product_batch',
-        [$batch_id, $category_code, 1, null]
+        [$batch_id, $category_code, 1, null, $beginDate, $endDate]
     );
     tvc_sync_log("Started new product batch $batch_id (category: $category_code)", 'product');
 }

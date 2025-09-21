@@ -1,20 +1,20 @@
 <div class="wrap">
-    <h1 class="wp-heading-inline">📦 Product Importer</h1>
+    <h1 class="wp-heading-inline">📦 Tvc Category Pull</h1>
     <hr class="wp-header-end">
 
     <?php
-    if (isset($_POST['sync_type']) && $_POST['sync_type'] == 'products') {
-        echo '<div class="notice notice-success is-dismissible"><p>✅ Products data has been updated successfully.</p></div>';
-    }
+        if (isset($_POST['sync_type']) && $_POST['sync_type'] == 'products') {
+            echo '<div class="notice notice-success is-dismissible"><p>✅ Products data has been updated Started.</p></div>';
+        }
 
-    if (isset($_POST['sync_type']) && $_POST['sync_type'] == 'product_cat') {
-        echo '<div class="notice notice-success is-dismissible"><p>✅ Category data has been updated successfully.</p></div>';
-    }
+        if (isset($_POST['sync_type']) && $_POST['sync_type'] == 'product_cat') {
+            echo '<div class="notice notice-success is-dismissible"><p>✅ Category data has been updated Started.</p></div>';
+        }
     ?>
 
-    <div class="card" style="max-width:700px; padding:20px; margin-top:20px;">
+    <div class="importer card" style="max-width:700px; padding:20px; margin-top:20px;">
         <p class="description" style="margin-bottom:20px;">
-            Select what you want to sync from the API. Choose a sync type and category, then click fetch.
+            Select what you want to sync from the API. Choose a category, then click fetch.
         </p>
 
         <form method="post" id="mpi-category-form">
@@ -22,7 +22,7 @@
 
             <table class="form-table">
                 <tbody>
-                <tr>
+                <!-- <tr>
                     <th scope="row"><label for="sync_type">Sync Type</label></th>
                     <td>
                         <select required name="sync_type" id="sync_type" style="min-width: 250px;">
@@ -31,7 +31,9 @@
                         </select>
                         <p class="description">Choose whether to import products or just categories.</p>
                     </td>
-                </tr>
+                </tr> -->
+
+                <input type="hidden" value="product_cat" name="sync_type" />
 
                 <tr>
                     <th scope="row"><label for="parent_category">Parent Category</label></th>
@@ -55,7 +57,7 @@
                 <tr>
                     <th scope="row">Child Categories</th>
                     <td>
-                        <div id="child-category-container" style="margin-top:10px;"></div>
+                        <div id="child-category-container" style="margin-top:10px;grid-gap: 10px;display: flex;"></div>
                         <p class="description">Child categories will appear here dynamically.</p>
                     </td>
                 </tr>
@@ -63,43 +65,15 @@
             </table>
 
             <p class="submit">
-                <button type="submit" class="button button-primary button-hero">🚀 Fetch Category & Products</button>
+                <button type="submit" class="button button-primary button-hero">🚀 Fetch Category</button>
             </p>
         </form>
     </div>
 </div>
 
-
 <?php
 
-function ww_tvc_rec_cats($categoryCode = null)
-{
-    $api = new MPI_API();
-
-    // Fetch categories
-    $response = $api->get_categories_from_api($categoryCode);
-    $categories = $response['CateoryList'] ?? [];
-
-    $result = [];
-
-    foreach ($categories as $category) {
-        if (empty($category['Code']) || empty($category['Name'])) {
-            continue;
-        }
-
-        // Recursive call for children
-        $children = ww_tvc_rec_cats($category['Code']);
-
-        $result[] = [
-            'code' => $category['Code'],
-            'name' => $category['Name'],
-            "ParentCode" => $category['ParentCode'] ?? null,
-            'children' => $children, // nested array
-        ];
-    }
-
-    return $result;
-}
+require 'pre-loader.php';
 
 /**
  * @return void
@@ -233,40 +207,17 @@ if (isset($_POST['parent_category_code'])) {
     // import Defaults
     $parent_code = $categoryCode;
     $sync_type = $_POST['sync_type'] ?? '';
-    if ($sync_type == 'products') {
-        // Action schedular for prodigious
-        ww_start_product_import($categoryCode);
-
-//        $lastProductId = null;
-//        $maxPages = 1; //
-//        $pageIndex = 1; // Db offset
-//        $perPage = 30;
-//        // $beginDate = '2020-01-11T00:16:34';
-//        // $endDate = '2020-01-15T00:16:34';
-//        $beginDate = null;
-//        $endDate = null;
-//        do {
-//            $products = $api->get_products_by_category_code($categoryCode, $lastProductId, $perPage, $pageIndex, $beginDate, $endDate);
-//            $importer->ww_update_detail_of_products($products);
-//            $lastProductId = $products['lastProductId'];
-//            $pageIndex++;
-//        } while ($pageIndex <= $maxPages);
-
-    } elseif ($sync_type == 'product_cat') {
+    
+    if ($sync_type == 'product_cat') {
         // Fetch product cats
         $existing_parent = ww_tvc_get_term_data_by_tvc_code($parent_code);
         if (empty($existing_parent)) {
             ww_tvs_import_allowed_channel_product_cats();
             $existing_parent = ww_tvc_get_term_data_by_tvc_code($parent_code);
         }
-//        $categoriesTree = ww_tvc_rec_cats($parent_code);
-//        if (!empty($categoriesTree)) {
-//            ww_import_categories_to_wc($categoriesTree, $existing_parent->term_id);;
-//        }
-        // Action Schedular
         ww_start_category_sync_now($parent_code, $existing_parent->term_id);;
     } else {
-        echo "Product Sync ype is not set";
+        echo "Product Sync type is not set";
     }
 }
 

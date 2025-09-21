@@ -11,6 +11,10 @@ class MPI_Importer
         add_action('wp_ajax_product_fetch', [$this, 'ww_ajax_product_save_update']);
         // For non-logged-in users
         add_action('wp_ajax_nopriv_product_fetch', [$this, 'ww_ajax_product_save_update']);
+
+        add_action('wp_ajax_product_fetch_by_date', [$this, 'ww_ajax_product_fetch_date']);
+        // For non-logged-in users
+        add_action('wp_ajax_nopriv_product_fetch_by_date', [$this, 'ww_ajax_product_fetch_date']);
     }
 
     public function register_custom_taxonomies()
@@ -38,6 +42,27 @@ class MPI_Importer
             )
         );
 
+        register_taxonomy(
+            ww_tvs_get_product_manufacturer_taxonomy_type(), // Taxonomy slug
+            'product',
+            array(
+                'labels' => array(
+                    'name' => 'Manufacturers',
+                    'singular_name' => 'Manufacturer',
+                    'search_items' => 'Search Manufacturers',
+                    'all_items' => 'All Manufacturers',
+                    'edit_item' => 'Edit Manufacturer',
+                    'update_item' => 'Update Manufacturer',
+                    'add_new_item' => 'Add New Manufacturer',
+                    'new_item_name' => 'New Manufacturer Name',
+                    'menu_name' => 'Manufacturers',
+                ),
+                'hierarchical' => true,
+                'show_ui' => true,
+                'show_admin_column' => true,
+                'query_var' => true,
+            )
+        );
     }
 
     public function import_categories($categories)
@@ -84,17 +109,20 @@ class MPI_Importer
     function ww_update_detail_of_products($products, $batch_id = null)
     {
         global $wpdb;
+        $success_count = 0;
+        $failure_count = 0;
+        $total_processed = 0;
+        $stage = 'Scheduled';
+        $invalid_records = [];
 
-        $count = 0;
         foreach ($products['ProductItemNoList'] as $p) {
             try {
+                $stage = 'Processing';
                 $brandIds = [];
                 $modelIds = [];
     
                 $sku = $p['ItemNo'];
-    
                 $body = $this->ww_tvc_get_products_by_sku($sku);
-    
                 $response = json_decode($body, true);
 
                 // Safely get 'Detail'
@@ -106,23 +134,22 @@ class MPI_Importer
                 if (isset($response['ModelList']) && is_array($response['ModelList'])) {
                     $model_list = $response['ModelList'];
                 } else {
-                    add_import_error_log($batch_id, $tvc_product_data, 'Empty Model List', 'product');
-
+                    // add_import_error_log($batch_id, $tvc_product_data, 'Empty Model List', 'product');
                     $model_list = [];
                 }
 
                 if (empty($tvc_product_data)) {
-                    add_import_error_log($batch_id, $tvc_product_data, 'Empty Product', 'product');
-    
-                    my_log_error('Empty Product' . $tvc_product_data);
+                    $invalid_records[] = ['Empty Product' => $sku];
+                    // add_import_error_log($batch_id, $tvc_product_data, 'Empty Product', 'product');
+                    // my_log_error('Empty Product' . $tvc_product_data);
                     continue;
                 }
     
                 if (function_exists('category_exists_by_code')) {
                     $checkCategory = category_exists_by_code($tvc_product_data['CategoryCode']);
                     if (!$checkCategory) {
-                        add_import_error_log($batch_id, $tvc_product_data, 'Category Code does not exist', 'product');
-                        my_log_error('Category Code does not exist' . $tvc_product_data['CategoryCode']);
+                        $invalid_records[] = ['Category Code does not exist' . $tvc_product_data['CategoryCode'] => $sku];
+                        // my_log_error('Category Code does not exist' . $tvc_product_data['CategoryCode']);
                         continue;
                     }
                 }
@@ -135,14 +162,29 @@ class MPI_Importer
                 $this->update_tvc_products($p, $product_id, $tvc_product_data);
     
                 $this->update_additional_info($product_id, $tvc_product_data, $product, $model_list, $sku);
-    
-                $count++;
+
+                $successfully_processed[] = $sku;
+                $success_count++;
+                $stage = 'Completed';
             } catch (Exception $e) {
-                add_import_error_log($batch_id, $p['ItemNo'], $e->getMessage(), 'product');
+                $failure_count++;
+                $stage = 'Failed';
+                // add_import_error_log($batch_id, $p['ItemNo'], $e->getMessage(), 'product');
             }
         }
 
-        my_log_error('Product Inserted ' . $count);
+        $state = [
+            'success' => $success_count,
+            'failed' => $failure_count,
+            'total_processed' => $success_count + $failure_count,
+            'stage' => $stage,
+            'invalid_records' => $invalid_records,
+            'lastProductId' => $p['ProductId'] ?? null,
+        ];
+
+        add_import_error_log($batch_id, json_encode($state), json_encode($successfully_processed), 'product');
+
+        // my_log_error('Product Inserted ' . $count);
 
         return true;
     }
@@ -159,7 +201,7 @@ class MPI_Importer
     {
         $this->update_tvc_bulk_pricing_table($product_id, $tvc_product_data);
 
-        $brandIds = $this->add_update_brand($tvc_product_data, $product_id);
+        $brandIds = $this->add_update_manufacturer($tvc_product_data, $product_id);
 
         $modelIds = $this->add_update_models($tvc_product_data, $product_id);
 
@@ -299,6 +341,35 @@ class MPI_Importer
         $body = wp_remote_retrieve_body($response);
 
         return $body;
+    }
+
+    function ww_ajax_product_fetch_date()
+    {
+        $start_date = isset($_POST['start_date']) ? sanitize_text_field($_POST['start_date']) : '';
+        $end_date = isset($_POST['end_date']) ? sanitize_text_field($_POST['end_date']) : '';
+
+        $importer = new MPI_Importer();
+        $api = new MPI_API();
+
+        $lastProductId = null;
+        $maxPages = 1; // 
+        $pageIndex = 1; // Db offset
+        $perPage = 10;
+
+        // Current date/time in WP timezone
+        $current_time = current_time('timestamp');
+
+        // Begin date = 15 minutes before now
+        $beginDate = $start_date;
+        $endDate = $end_date;
+
+        ww_start_product_import(null, $beginDate, $endDate);
+
+        wp_send_json_success([
+            'success' => true,
+            'message' => 'Product fetch initiated. It may take a few minutes to complete.',
+        ]);
+        exit;
     }
 
     /**
@@ -596,10 +667,10 @@ class MPI_Importer
      * @param $data
      * @param $product_id
      * @return void
-     * add_update_brand
+     * add_update_manufacturer
      * Save brand / manufacturer
      */
-    public function add_update_brand($data, $product_id)
+    public function add_update_manufacturer($data, $product_id)
     {
         global $wpdb;
         $table_name = $wpdb->prefix . ww_tvc_get_manufacturer_product_relation_table_name();
@@ -611,7 +682,7 @@ class MPI_Importer
         }
 
         $brand_ids = array();
-        $brand_taxonomy = 'product_brand';
+        $brand_taxonomy = ww_tvs_get_product_manufacturer_taxonomy_type();
 
         // ww_tvc_print_r($data['CompatibleList']);
         foreach ($data['CompatibleList'] as $list) {
@@ -634,6 +705,7 @@ class MPI_Importer
                     $brand_taxonomy,
                     ['slug' => $brand_slug]
                 );
+
                 if (!is_wp_error($new_term) && isset($new_term['term_id'])) {
                     $brand_ids[] = (int)$new_term['term_id'];
                 }
@@ -770,6 +842,35 @@ class MPI_Importer
         foreach ($data['SpecificationList'] as $attr) {
             $attr_name = sanitize_title($attr['Name']); // e.g. "Color"
             $attr_value = sanitize_text_field($attr['Value']); // e.g. "Red"
+
+            if ($attr_name == 'brand') {
+                $brand_taxonomy = 'product_brand';
+                $brand_name = $attr_value;
+                $brand_slug = sanitize_title($attr_value);
+                
+                //  Check if a brand exists
+                $existing_term = get_term_by('slug', $brand_slug, $brand_taxonomy);
+    
+                if ($existing_term) {
+                    // Update the existing brand (name, slug or description)
+                    wp_update_term($existing_term->term_id, $brand_taxonomy, [
+                        'name' => $brand_name,
+                        'slug' => $brand_slug,
+                    ]);
+                    $brand_ids[] = (int)$existing_term->term_id;
+                } else {
+                    // Insert a new brand
+                    wp_insert_term(
+                        $brand_name,
+                        $brand_taxonomy,
+                        ['slug' => $brand_slug]
+                    );
+                }
+
+                if (!empty($brand_ids)) {
+                    wp_set_object_terms($product_id, $brand_ids, $brand_taxonomy);
+                }
+            }
 
             if (!in_array($attr_name, ['color', 'material', 'packaging-type', 'colorstyle', 'quick-charge'])) continue;
 

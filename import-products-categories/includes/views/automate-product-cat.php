@@ -35,6 +35,7 @@ function ww_import_category_level($batch_id, $parent_code = null, $parent_id = 0
 {
     $parent_desc = $parent_code ? $parent_code : 'TOP-LEVEL';
     tvc_sync_log("Starting run for parent: {$parent_desc}");
+    $stage = 'Scheduled'; 
 
     // Simple global lock to avoid concurrent runs
     // $lock_key = 'tvc_sync_running';
@@ -52,8 +53,6 @@ function ww_import_category_level($batch_id, $parent_code = null, $parent_id = 0
         $categories = ww_get_categories_level($parent_code);
 
         if (empty($categories)) {
-            add_import_error_log($batch_id, $categories, "No categories found for parent: {$parent_desc}", 'category');
-
             tvc_sync_log("No categories found for parent: {$parent_desc}");
             delete_transient($lock_key);
             return;
@@ -61,11 +60,19 @@ function ww_import_category_level($batch_id, $parent_code = null, $parent_id = 0
 
         $max_schedule_per_run = 500; // adjust if needed
         $i = 0;
+        $state = [];
+        $success_count = 0;
+        $failure_count = 0;
+        $updated_count = 0;
+        $created_count = 0;
+        $invalid_records = [];
+        $successfully_processed = [];
 
         foreach ($categories as $cat) {
-            if (empty($cat['Name']) || empty($cat['Code'])) {
-                add_import_error_log($batch_id, $cat, "Skipped invalid cat record under parent: {$parent_desc}", 'category');
+            $stage = 'Processing'; 
 
+            if (empty($cat['Name']) || empty($cat['Code'])) {
+                $invalid_records[] = $cat;
                 tvc_sync_log("Skipped invalid cat record under parent {$parent_desc}");
                 continue;
             }
@@ -94,6 +101,7 @@ function ww_import_category_level($batch_id, $parent_code = null, $parent_id = 0
                     'slug' => $slug,
                     'parent' => $parent_id,
                 ]);
+                $updated_count++;
                 tvc_sync_log("Updated category: {$name} (code {$code})");
             } else {
                 $new_term = wp_insert_term($name, 'product_cat', [
@@ -105,8 +113,10 @@ function ww_import_category_level($batch_id, $parent_code = null, $parent_id = 0
                     continue;
                 }
                 $term_id = $new_term['term_id'];
+                $created_count++;
                 tvc_sync_log("Created category: {$name} (code {$code})");
             }
+            $successfully_processed[] = $code;
 
             update_term_meta($term_id, '_tvc_product_cat_code', $code);
 
@@ -116,6 +126,7 @@ function ww_import_category_level($batch_id, $parent_code = null, $parent_id = 0
                 break;
             }
 
+            $success_count++;
             // ✅ NEW: Only schedule if this category actually has sub-categories
             $child_cats = ww_get_categories_level($code);
             if (!empty($child_cats)) {
@@ -124,8 +135,6 @@ function ww_import_category_level($batch_id, $parent_code = null, $parent_id = 0
                     wp_schedule_single_event(time() + $delay, 'ww_import_child_level', [$batch_id, $code, $term_id]);
                     tvc_sync_log("Scheduled child import for code {$code} (term {$term_id}) with +{$delay}s delay");
                 } else {
-                    add_import_error_log($batch_id, $child_cats, "Child import already scheduled for code {$code} (term {$term_id}) — skipping", 'category');
-
                     tvc_sync_log("Child import already scheduled for code {$code} (term {$term_id}) — skipping");
                 }
             } else {
@@ -134,11 +143,26 @@ function ww_import_category_level($batch_id, $parent_code = null, $parent_id = 0
 
             $i++;
         }
+
+        $stage = 'Completed';
     } catch (Exception $e) {
-        add_import_error_log($batch_id, $categories, "Exception during import for parent {$parent_desc}: " . $e->getMessage(), 'category');
-        
+        $failure_count++;
+        $stage = 'Failed'; 
+
         tvc_sync_log("Exception during import for parent {$parent_desc}: " . $e->getMessage());
     }
+
+    $state = [
+        'success' => $success_count,
+        'failed' => $failure_count,
+        'created' => $created_count,
+        'updated' => $updated_count,
+        'total_processed' => $success_count + $failure_count,
+        'stage' => $stage,
+        'invalid_records' => $invalid_records
+    ];
+
+    add_import_error_log($batch_id, json_encode($state), json_encode($successfully_processed), 'category');
 
     // Release lock
     delete_transient($lock_key);
@@ -160,6 +184,7 @@ function ww_start_category_sync_now($parent_code = null, $parent_id = 0)
 
     // Avoid scheduling duplicate top-level job
     if (!wp_next_scheduled('ww_import_child_level', [$batch_id, $parent_code, $parent_id])) {
+
         wp_schedule_single_event(time(), 'ww_import_child_level', [$batch_id, $parent_code, $parent_id]);
         tvc_sync_log("Scheduled top-level job (now).");
     } else {

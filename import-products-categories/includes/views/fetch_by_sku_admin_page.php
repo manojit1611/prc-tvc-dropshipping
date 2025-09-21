@@ -4,7 +4,7 @@
 
     <div class="card" style="max-width:700px; padding:20px; margin-top:20px;">
         <p class="description" style="margin-bottom:20px;">
-            Enter SKU of the product you want to fetch and update. Click the "Fetch via AJAX" button to retrieve the product details.
+            Enter SKU of the product you want to fetch and update. Click the "Fetch" button to retrieve the product details.
         </p>
 
         <form method="post" id="mpi-category-form">
@@ -17,7 +17,7 @@
                         <td>
                             <input type="text" id="sku" name="sku" style="min-width: 250px;"
                                 placeholder="Enter SKU to fetch">
-                            <button type="button" id="fetch_sku_btn" class="button">Fetch via AJAX</button>
+                            <button type="button" id="fetch_sku_btn" class="button">Fetch</button>
                             <div id="ajax_result" style="margin-top:10px; font-weight:bold;"></div>
                         </td>
                     </tr>
@@ -27,8 +27,9 @@
     </div>
 </div>
 
-<script>
+<?php require 'pre-loader.php'; ?>
 
+<script>
     jQuery(document).ready(function ($) {
         $('#fetch_sku_btn').on('click', function () {
             var sku = $('#sku').val();
@@ -61,6 +62,5 @@
             });
         });
     });
-
 </script>
 
