@@ -1,15 +1,23 @@
+<style>
+    select {
+        width: 100%;
+    }
+    div#child-category-container:empty {
+        margin-bottom: 0 !important;
+    }
+</style>
 <div class="wrap">
-    <h1 class="wp-heading-inline">📦 Tvc Product Importer</h1>
+    <h1 class="wp-heading-inline"><?php echo __(TVC_PLUGIN_NAME_PREFIX . ' Product Importer') ?></h1>
     <hr class="wp-header-end">
 
     <?php
-        if (isset($_POST['sync_type']) && $_POST['sync_type'] == 'products') {
-            echo '<div class="notice notice-success is-dismissible"><p>✅ Products data has been updated successfully.</p></div>';
-        }
+    if (isset($_POST['sync_type']) && $_POST['sync_type'] == 'products') {
+        echo '<div class="notice notice-success is-dismissible"><p>✅ Products data has been updated successfully.</p></div>';
+    }
 
-        if (isset($_POST['sync_type']) && $_POST['sync_type'] == 'product_cat') {
-            echo '<div class="notice notice-success is-dismissible"><p>✅ Category data has been updated successfully.</p></div>';
-        }
+    if (isset($_POST['sync_type']) && $_POST['sync_type'] == 'product_cat') {
+        echo '<div class="notice notice-success is-dismissible"><p>✅ Category data has been updated successfully.</p></div>';
+    }
     ?>
 
     <div class="importer card" style="max-width:700px; padding:20px; margin-top:20px;">
@@ -32,7 +40,7 @@
                         <p class="description">Choose whether to import products or just categories.</p>
                     </td>
                 </tr> -->
-                <input type="hidden" value="products" name="sync_type" />
+                <input type="hidden" value="products" name="sync_type"/>
 
                 <tr>
                     <th scope="row"><label for="parent_category">Parent Category</label></th>
@@ -56,7 +64,7 @@
                 <tr>
                     <th scope="row">Child Categories</th>
                     <td>
-                        <div id="child-category-container" style="margin-top:10px;grid-gap: 10px;display: flex;"></div>
+                        <div id="child-category-container" style="margin-top:10px;grid-gap: 10px;display: flex;flex-wrap: wrap"></div>
                         <p class="description">Child categories will appear here dynamically.</p>
                     </td>
                 </tr>

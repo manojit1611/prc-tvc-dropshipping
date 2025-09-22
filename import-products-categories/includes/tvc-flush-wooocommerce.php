@@ -49,7 +49,7 @@ function my_wc_reset_all_data() {
     $wpdb->query("
         DELETE t FROM {$wpdb->terms} t
         LEFT JOIN {$wpdb->term_taxonomy} tt ON t.term_id = tt.term_id
-        WHERE tt.taxonomy IN ('product_cat','product_tag','product_brand','product_model','pa_color','pa_size')
+        WHERE tt.taxonomy IN ('product_cat','product_tag','product_brand','product_manufacturer','product_model','pa_color','pa_size')
     ");
 
     // Delete WooCommerce term taxonomy
@@ -80,7 +80,10 @@ function my_wc_reset_all_data() {
         "{$wpdb->prefix}wc_customer_lookup",
         "{$wpdb->prefix}wc_download_log",
         "{$wpdb->prefix}wc_tax_rate_classes",
-        "{$wpdb->prefix}tvc_manufacturer_hierarchy",
+
+
+        "{$wpdb->prefix}tvc_manufacturer_product_relation",
+        "{$wpdb->prefix}tvc_manufacturer_relation",
         "{$wpdb->prefix}tvc_products_data",
         "{$wpdb->prefix}tvc_product_bulk_pricing"
     ];
@@ -92,6 +95,16 @@ function my_wc_reset_all_data() {
 
     // Delete WooCommerce options (settings)
     $wpdb->query("DELETE FROM {$wpdb->options} WHERE option_name LIKE 'woocommerce_%'");
+
+    // clear all schedules
+    if(function_exists('ww_clear_all_product_batches')){
+        ww_clear_all_product_batches();
+    }
+
+    // ww_clear_all_child_schedules
+    if(function_exists('ww_clear_all_child_schedules')){
+        ww_clear_all_child_schedules();
+    }
 }
 
 

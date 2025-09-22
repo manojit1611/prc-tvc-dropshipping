@@ -13,18 +13,26 @@
 </div>
 
 <script>
+
+    function ww_start_preloader() {
+        jQuery('#mpi-preloader').fadeIn();
+    }
+
+    function ww_stop_preloader() {
+        jQuery('#mpi-preloader').fadeOut();
+    }
+
     jQuery(document).ready(function ($) {
         // When form is submitted
         $('#mpi-category-form').on('submit', function () {
             $('#mpi-preloader').fadeIn(); // show preloader
         });
-
         // If you’re using AJAX, show preloader on request start, hide on complete
-        $(document).ajaxStart(function () {
-            $('#mpi-preloader').fadeIn();
-        }).ajaxStop(function () {
-            $('#mpi-preloader').fadeOut();
-        });
+        // $(document).ajaxStart(function () {
+        //     $('#mpi-preloader').fadeIn();
+        // }).ajaxStop(function () {
+        //     $('#mpi-preloader').fadeOut();
+        // });
     });
 </script>
 

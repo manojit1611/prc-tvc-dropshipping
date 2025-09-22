@@ -1,40 +1,36 @@
+<style>
+    select {
+        width: 100%;
+    }
+
+    div#child-category-container:empty {
+        margin-bottom: 0 !important;
+    }
+</style>
 <div class="wrap">
-    <h1 class="wp-heading-inline">📦 Tvc Category Pull</h1>
+    <h1 class="wp-heading-inline"><?php echo __(TVC_PLUGIN_NAME_PREFIX . ' Categories Importer') ?></h1>
     <hr class="wp-header-end">
 
     <?php
-        if (isset($_POST['sync_type']) && $_POST['sync_type'] == 'products') {
-            echo '<div class="notice notice-success is-dismissible"><p>✅ Products data has been updated Started.</p></div>';
-        }
+    if (isset($_POST['sync_type']) && $_POST['sync_type'] == 'products') {
+        echo '<div class="notice notice-success is-dismissible"><p>✅ A product pull request has been scheduled.</p></div>';
+    }
 
-        if (isset($_POST['sync_type']) && $_POST['sync_type'] == 'product_cat') {
-            echo '<div class="notice notice-success is-dismissible"><p>✅ Category data has been updated Started.</p></div>';
-        }
+    if (isset($_POST['sync_type']) && $_POST['sync_type'] == 'product_cat') {
+        echo '<div class="notice notice-success is-dismissible"><p>✅ A category pull request has been scheduled.</p></div>';
+    }
     ?>
 
-    <div class="importer card" style="max-width:700px; padding:20px; margin-top:20px;">
+    <div class="card" style="max-width:700px; padding:20px; margin-top:20px;">
         <p class="description" style="margin-bottom:20px;">
-            Select what you want to sync from the API. Choose a category, then click fetch.
+            <?php echo __('Choose a category, then click fetch. It will fetch all sub categories of current selected category via background automation.') ?>
         </p>
 
-        <form method="post" id="mpi-category-form">
+        <form method="post" id="mpi-tvc-category-form">
             <?php wp_nonce_field('mpi_import_nonce'); ?>
-
             <table class="form-table">
                 <tbody>
-                <!-- <tr>
-                    <th scope="row"><label for="sync_type">Sync Type</label></th>
-                    <td>
-                        <select required name="sync_type" id="sync_type" style="min-width: 250px;">
-                            <option value="products">Products</option>
-                            <option value="product_cat">Product Categories</option>
-                        </select>
-                        <p class="description">Choose whether to import products or just categories.</p>
-                    </td>
-                </tr> -->
-
-                <input type="hidden" value="product_cat" name="sync_type" />
-
+                <input type="hidden" value="product_cat" name="sync_type"/>
                 <tr>
                     <th scope="row"><label for="parent_category">Parent Category</label></th>
                     <td>
@@ -49,16 +45,15 @@
                             }
                             ?>
                         </select>
-                        <p class="description">This will fetch child categories and products under the selected
-                            parent.</p>
                     </td>
                 </tr>
 
                 <tr>
                     <th scope="row">Child Categories</th>
                     <td>
-                        <div id="child-category-container" style="margin-top:10px;grid-gap: 10px;display: flex;"></div>
-                        <p class="description">Child categories will appear here dynamically.</p>
+                        <div id="child-category-container"
+                             style="margin-bottom:10px;grid-gap: 10px;display: flex;flex-wrap: wrap"></div>
+                        <p style="margin-top: 0;" class="description">Child categories will appear here dynamically.</p>
                     </td>
                 </tr>
                 </tbody>
@@ -194,30 +189,87 @@ function ww_import_categories_to_wc($categories, $parent_id = 0)
     }
 }
 
-if (isset($_POST['parent_category_code'])) {
-    if (isset($_POST['category_code']) && !empty($_POST['category_code'])) {
-        $categoryCode = sanitize_text_field($_POST['category_code']);
-    } else {
-        $categoryCode = sanitize_text_field($_POST['parent_category_code']);
-    }
 
+// Manage Post request
+if (isset($_POST['parent_category_code'])) {
     $importer = new MPI_Importer();
     $api = new MPI_API();
-
-    // import Defaults
-    $parent_code = $categoryCode;
+    $parent_code = sanitize_text_field($_POST['parent_category_code']);
     $sync_type = $_POST['sync_type'] ?? '';
-    
-    if ($sync_type == 'product_cat') {
-        // Fetch product cats
+
+
+    // Get existing parent term
+    $existing_parent = ww_tvc_get_term_data_by_tvc_code($parent_code);
+    if (empty($existing_parent)) {
+        ww_tvs_import_allowed_channel_product_cats();
         $existing_parent = ww_tvc_get_term_data_by_tvc_code($parent_code);
-        if (empty($existing_parent)) {
-            ww_tvs_import_allowed_channel_product_cats();
-            $existing_parent = ww_tvc_get_term_data_by_tvc_code($parent_code);
-        }
-        ww_start_category_sync_now($parent_code, $existing_parent->term_id);;
-    } else {
-        echo "Product Sync type is not set";
     }
+
+
+    // prepare formate of childs
+    $all_child_cats = array();
+    if (isset($_POST['category_code']) && !empty($_POST['category_code']) && is_array($_POST['category_code']) && count($_POST['category_code']) > 0) {
+        foreach ($_POST['category_code'] as $cat_code) {
+            if (str_starts_with($cat_code, '{')) {
+                $all_child_cats[] = json_decode(wp_unslash($cat_code), true);
+            }
+        }
+    }
+    // do save and update into db
+    if (!empty($all_child_cats)) {
+        $last_created_term = $existing_parent; // keep parent first always
+        foreach ($all_child_cats as $index => $cat) {
+            ww_tvc_print_r($last_created_term);
+
+            $parent_id = $last_created_term->term_id;
+            // Validate status
+            if ($cat['Status'] != 'Valid') {
+                // TODO fire action based on status
+                tvc_sync_log("Skipped invalid category record  {$cat['Name']}");
+                continue;
+            }
+
+            // Validate name and code
+            $name = sanitize_text_field($cat['Name']);
+            $code = sanitize_text_field($cat['Code']);
+            $slug = sanitize_title($name);
+            $existing = get_terms([
+                'taxonomy' => 'product_cat',
+                'hide_empty' => false,
+                'meta_query' => [
+                    ['key' => '_tvc_product_cat_code', 'value' => $code],
+                ],
+                'number' => 1,
+            ]);
+
+            if (!empty($existing) && !is_wp_error($existing)) {
+                $term_id = $existing[0]->term_id;
+                wp_update_term($term_id, 'product_cat', [
+                    'name' => $name,
+                    'slug' => $slug,
+                    'parent' => $parent_id,
+                ]);
+                tvc_sync_log("Updated category: {$name} (code {$code})");
+            } else {
+                $new_term = wp_insert_term($name, 'product_cat', [
+                    'slug' => $slug,
+                    'parent' => $parent_id,
+                ]);
+                if (is_wp_error($new_term)) {
+                    tvc_sync_log("Failed to insert category: {$name} – " . $new_term->get_error_message());
+                    continue;
+                }
+                $term_id = $new_term['term_id'];
+                tvc_sync_log("Created category: {$name} (code {$code})");
+            }
+
+            // update latest data for last created term
+            $last_created_term = get_term_by('id', $term_id, 'product_cat');
+            update_term_meta($term_id, '_tvc_product_cat_code', $code);
+        }
+    }
+
+//        ww_start_category_sync_now($parent_code, $existing_parent->term_id);;
+
 }
 

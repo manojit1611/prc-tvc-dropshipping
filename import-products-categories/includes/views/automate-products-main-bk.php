@@ -55,7 +55,6 @@ function ww_import_product_batch($batch_id, $category_code = '', $page_index = 1
             tvc_sync_log("Batch $batch_id products found to proceed." . count($products['ProductItemNoList']), 'product');
         }
 
-        sleep(1);
         // Update WooCommerce products (your updater)
         $importer->ww_update_detail_of_products($products, $batch_id);
 

@@ -13,8 +13,8 @@ class MPI_Admin
     public function add_admin_menu()
     {
         add_menu_page(
-            __('TVC', 'import-products-categories'), // Menu Title
-            __('TVC', 'import-products-categories'), // Page Title
+            __('TVC Drop Shipping', 'import-products-categories'), // Menu Title
+            __('TVC Drop Shipping', 'import-products-categories'), // Page Title
             'manage_options',
             'tvc-main', // Slug for main page
             [$this, 'render_admin_page'], // Callback for main page
@@ -25,8 +25,8 @@ class MPI_Admin
         // Submenu: Product Importer
         add_submenu_page(
             'tvc-main', // Parent slug
-            __('Product Pull', 'import-products-categories'), // Page title
-            __('Product Pull', 'import-products-categories'), // Menu title
+            __('Pull Products', 'import-products-categories'), // Page title
+            __('Pull Products', 'import-products-categories'), // Menu title
             'manage_options',
             'product_page', // Slug
             [$this, 'render_product_page'] // Callback
@@ -34,8 +34,8 @@ class MPI_Admin
 
         add_submenu_page(
             'tvc-main', // Parent slug
-            __('Categories Pull', 'import-products-categories'), // Page title
-            __('Categories Pull', 'import-products-categories'), // Menu title
+            __('Pull Categories', 'import-products-categories'), // Page title
+            __('Pull Categories', 'import-products-categories'), // Menu title
             'manage_options',
             'category_page', // Slug
             [$this, 'render_category_page'] // Callback
@@ -61,6 +61,7 @@ class MPI_Admin
             [$this, 'fetch_by_date_admin_page']
         );
 
+
         add_submenu_page(
             'tvc-main',
             __('Logs', 'import-products-categories'),
@@ -69,7 +70,7 @@ class MPI_Admin
             'tvc-logs',
             [$this, 'render_tvc_import_logs_page']
         );
-        
+
 
         remove_submenu_page('tvc-main', 'tvc-main');
     }
@@ -90,12 +91,13 @@ class MPI_Admin
         ]);
     }
 
+
     public function render_product_page()
     {
         include TVC_MPI_PLUGIN_PATH . 'includes/views/product-pull-page.php';
     }
 
-     public function render_category_page()
+    public function render_category_page()
     {
         include TVC_MPI_PLUGIN_PATH . 'includes/views/category-pull-page.php';
     }
@@ -110,16 +112,60 @@ class MPI_Admin
         include TVC_MPI_PLUGIN_PATH . 'includes/views/fetch_by_date_admin_page.php';
     }
 
+
+    /**
+     * @param $slug
+     * @return void
+     * get_product_cat_select_based_on_tvc_api
+     */
+    public function get_product_cat_select_based_on_tvc_api($slug = null)
+    {
+
+        $tvc_cat = array();
+        if (str_starts_with($slug, '{')) {
+            $tvc_cat = json_decode(wp_unslash($slug), true);
+            $slug = $tvc_cat['Code'] ?? '';
+        }
+        $apiInstance = new MPI_API();
+        $childElements = $apiInstance->get_categories_from_api($slug);
+        $childElements = $childElements['CateoryList'] ?? array();
+        if (empty($childElements)) {
+            wp_send_json(array(
+                'msg' => 'No more records under this category.',
+                "data" => "",
+                "success" => 0
+            ));
+        }
+        ob_start();
+        echo '<select required name="category_code[]" class="mpi-child-category">';
+        echo '<option value="">-- Select Child Category --</option>';
+        foreach ($childElements as $child) {
+            echo '<option 
+             value="' . esc_attr(wp_json_encode($child)) . '" 
+            ">' . esc_html($child['Name']) . '</option>';
+        }
+        echo '</select>';
+        $data = ob_get_clean();
+        wp_send_json(array(
+            'msg' => '',
+            "data" => $data,
+            "success" => 1
+        ));
+    }
+
     public function get_child_categories()
     {
         check_ajax_referer('mpi_import_nonce', 'nonce');
-
         $json_response = array();
-
         $slug = sanitize_text_field($_POST['slug']);
-        $term = ww_tvc_get_term_data_by_tvc_code($slug,'product_cat');
 
+        $formData = $_POST;
+        $mode = $formData['mode'] ?? '';
+        if ($mode == "tvc_api") {
+            $this->get_product_cat_select_based_on_tvc_api($slug);
+        }
 
+        $term = ww_tvc_get_term_data_by_tvc_code($slug, 'product_cat');
         if (!$term) {
             wp_send_json_error('Invalid category slug');
         }
@@ -128,7 +174,6 @@ class MPI_Admin
             'hide_empty' => false,
             'parent' => $term->term_id,
         ]);
-
         if (!empty($children)) {
             ob_start();
             echo '<select name="category_code" class="mpi-child-category">';
@@ -139,7 +184,6 @@ class MPI_Admin
             }
             echo '</select>';
             $data = ob_get_clean();
-
             wp_send_json(array(
                 'msg' => '',
                 "data" => $data,

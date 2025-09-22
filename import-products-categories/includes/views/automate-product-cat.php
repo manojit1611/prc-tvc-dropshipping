@@ -48,6 +48,7 @@ function ww_import_category_level($batch_id, $parent_code = null, $parent_id = 0
 
     // Lock for a short period (2 min example)
     set_transient($lock_key, 1, 180);
+    $successfully_processed = [];
 
     try {
         $categories = ww_get_categories_level($parent_code);
@@ -66,8 +67,6 @@ function ww_import_category_level($batch_id, $parent_code = null, $parent_id = 0
         $updated_count = 0;
         $created_count = 0;
         $invalid_records = [];
-        $successfully_processed = [];
-
         foreach ($categories as $cat) {
             $stage = 'Processing'; 
 
@@ -143,7 +142,6 @@ function ww_import_category_level($batch_id, $parent_code = null, $parent_id = 0
 
             $i++;
         }
-
         $stage = 'Completed';
     } catch (Exception $e) {
         $failure_count++;
