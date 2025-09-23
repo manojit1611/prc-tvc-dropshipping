@@ -7,6 +7,7 @@
         margin-bottom: 0 !important;
     }
 </style>
+
 <div class="wrap">
     <h1 class="wp-heading-inline"><?php echo __(TVC_PLUGIN_NAME_PREFIX . ' Categories Importer') ?></h1>
     <hr class="wp-header-end">
@@ -205,7 +206,6 @@ if (isset($_POST['parent_category_code'])) {
         $existing_parent = ww_tvc_get_term_data_by_tvc_code($parent_code);
     }
 
-
     // prepare formate of childs
     $all_child_cats = array();
     if (isset($_POST['category_code']) && !empty($_POST['category_code']) && is_array($_POST['category_code']) && count($_POST['category_code']) > 0) {
@@ -215,15 +215,51 @@ if (isset($_POST['parent_category_code'])) {
             }
         }
     }
+
     // do save and update into db
     if (!empty($all_child_cats)) {
         $last_created_term = $existing_parent; // keep parent first always
         foreach ($all_child_cats as $index => $cat) {
             ww_tvc_print_r($last_created_term);
-
             $parent_id = $last_created_term->term_id;
+
             // Validate status
             if ($cat['Status'] != 'Valid') {
+                if (isset($_POST['category_code'])) {
+                    $categoryCode = $_POST['category_code'];
+                } else {
+                    $categoryCode = $_POST['parent_category_code'];
+                }
+
+                if ($term_id = ww_tvc_get_term_data_by_tvc_code(json_decode(wp_unslash($categoryCode[0]), true)['Code'])) {
+                    $term_id = $term_id->term_id;
+                    
+                    $product_ids = get_posts([
+                        'post_type'   => 'product',
+                        'numberposts' => -1,
+                        'fields'      => 'ids',
+                        'tax_query'   => [
+                            [
+                                'taxonomy' => 'product_cat',
+                                'field'    => 'term_id',
+                                'terms'    => $term_id,
+                            ],
+                        ],
+                    ]);
+    
+                    if (!empty($product_ids)) {
+                        foreach ($product_ids as $product_id) {
+                            wp_update_post([
+                                'ID'          => $product_id,
+                                'post_status' => 'draft', // disable product
+                            ]);
+                        }
+                    }
+    
+                    // 2️⃣ Delete the category itself
+                    wp_delete_term($term_id, 'product_cat');
+                }
+                
                 // TODO fire action based on status
                 tvc_sync_log("Skipped invalid category record  {$cat['Name']}");
                 continue;

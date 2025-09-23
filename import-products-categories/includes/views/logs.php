@@ -7,6 +7,22 @@ $batches = $wpdb->get_results("SELECT batch_id, created_at FROM $batches_table O
 
 $current_batch = isset($_GET['batch_id']) ? sanitize_text_field($_GET['batch_id']) : '';
 
+// Handle delete batch request
+if ( isset($_GET['delete_batch']) && !empty($_GET['delete_batch']) ) {
+    $batch_id = sanitize_text_field($_GET['delete_batch']);
+    if ( wp_verify_nonce($_GET['_wpnonce'], 'delete_batch_' . $batch_id) ) {
+        // delete logs first
+        $wpdb->delete($logs_table, ['batch_id' => $batch_id]);
+        // delete batch
+        $wpdb->delete($batches_table, ['batch_id' => $batch_id]);
+        // redirect to avoid resubmission
+        wp_safe_redirect(remove_query_arg(['delete_batch','_wpnonce']));
+        exit;
+    }
+}
+
+
+
 if (!$current_batch) {
 ?>
 
@@ -46,6 +62,7 @@ $total_pages = ceil($total_batches / $per_page);
                 <th>Total Success</th>
                 <th>Total Failed</th>
                 <th>View Logs</th>
+                <th>Actions</th>
             </tr>
         </thead>
         <tbody>
@@ -79,6 +96,20 @@ $total_pages = ceil($total_batches / $per_page);
                     <td><?php echo esc_html($total_failed); ?></td>
                     <td>
                         <a href="<?php echo esc_url(admin_url('admin.php?page=tvc-logs&batch_id=' . $batch->batch_id)); ?>" class="button button-small">View Logs</a>
+                    </td>
+                    <td>
+                        <?php 
+                        $delete_url = wp_nonce_url(
+                            add_query_arg([
+                                'page' => 'tvc-logs',
+                                'delete_batch' => $batch->batch_id
+                            ]),
+                            'delete_batch_' . $batch->batch_id
+                        );
+                        ?>
+                        <a href="<?php echo esc_url($delete_url); ?>" 
+                        class="button button-small button-danger" 
+                        onclick="return confirm('Are you sure you want to delete this batch and all related logs?');">Delete</a>
                     </td>
                 </tr>
             <?php endforeach; 
@@ -164,11 +195,14 @@ if ($current_batch) {
     echo "<h4>Logs for Batch ID: " . esc_html($current_batch) . "</h4>";
 
     if (!empty($logs)) {
-        echo '<table class="widefat fixed striped">';
+        echo '<table class="widefat fixed striped" style="width:98%;">';
         echo '<thead><tr>';
         echo '<th>Type</th>';
         echo '<th>Status</th>';
+        echo '<th>Filters</th>';
         echo '<th>Success SKUs</th>';
+        echo '<th>Invalid records</th>';
+        echo '<th>Failed records</th>';
         echo '</tr></thead><tbody>';
 
         foreach ($logs as $log) {
@@ -181,24 +215,66 @@ if ($current_batch) {
             $status = json_decode($log->status, true);
             echo '<td>';
             if (is_array($status)) {
+
+                // Begin inner table
+                echo '<table class="tvc-status-table" style="width:100%; border-collapse: collapse;">';
+                echo '<thead><tr>';
+                echo '<th style="border:1px solid #ccc;padding:4px;">Key</th>';
+                echo '<th style="border:1px solid #ccc;padding:4px;">Value</th>';
+                echo '</tr></thead><tbody>';
+
+                // Badge map
+                $badge_map = [
+                    'success' => 'tvc-status-success',
+                    'failed' => 'tvc-status-failed',
+                    'created' => 'tvc-status-created',
+                    'updated' => 'tvc-status-updated',
+                    'total_processed' => 'tvc-status-success',
+                ];
+
                 foreach ($status as $key => $val) {
-                    if (is_array($val)) continue; // skip invalid_records
-                    $class = '';
-                    switch ($key) {
-                        case 'success': $class = 'tvc-status-success'; break;
-                        case 'failed': $class = 'tvc-status-failed'; break;
-                        case 'created': $class = 'tvc-status-created'; break;
-                        case 'updated': $class = 'tvc-status-updated'; break;
-                        default: $class = 'tvc-status-success';
+                    // skip arrays first
+                    if (in_array($key, ['invalid_records','filters','failed_records'], true)) {
+                        continue;
                     }
-                    echo '<span class="tvc-status-badge ' . esc_attr($class) . '">' . esc_html(ucfirst($key)) . ': ' . esc_html($val) . '</span> ';
+
+                    $class = isset($badge_map[$key]) ? $badge_map[$key] : 'tvc-status-success';
+                    $value = is_scalar($val) ? $val : json_encode($val);
+
+                    echo '<tr>';
+                    echo '<td style="border:1px solid #ccc;padding:4px;"><b>' . esc_html(ucfirst(str_replace('_',' ',$key))) . '</b></td>';
+                    echo '<td style="border:1px solid #ccc;padding:4px;">' . esc_html($value) . '</td>';
+                    echo '</tr>';
                 }
+
+                // Stage row
+                if (!empty($status['stage'])) {
+                    echo '<tr>';
+                    echo '<td style="border:1px solid #ccc;padding:4px;"><strong>Stage</strong></td>';
+                    echo '<td style="border:1px solid #ccc;padding:4px;">' . esc_html($status['stage']) . '</td>';
+                    echo '</tr>';
+                }
+
+                echo '</tbody></table>';
+
             } else {
                 echo esc_html($log->status);
             }
+
             echo '</td>';
 
-            // Success SKUs
+            echo '<td>';
+            if (!empty($status['filters']) && is_array($status['filters'])) {
+                foreach ($status['filters'] as $filterKey => $filterVal) {
+                    $filterVal = $filterVal === null ? 'null' : $filterVal;
+                    echo '<li>' . esc_html(ucfirst(str_replace('_',' ',$filterKey))) . ': <code>' . esc_html($filterVal) . '</code></li>';
+                }
+                echo '</ul></div>';
+            }
+            echo '</td>';
+
+
+            // Success SKUs column (like before)
             $skus = json_decode($log->success_skus, true);
             echo '<td>';
             if (!empty($skus) && is_array($skus)) {
@@ -208,15 +284,32 @@ if ($current_batch) {
             }
             echo '</td>';
 
+            echo '<td>';
+            // Invalid records list
+            if (!empty($status['invalid_records']) && is_array($status['invalid_records'])) {
+                echo '<div><strong>Invalid Records:</strong><ul style="margin-left:15px;">';
+                foreach ($status['invalid_records'] as $invalid) {
+                    foreach ($invalid as $msg => $sku) {
+                        echo '<li>' . esc_html($msg) . ' → <code>' . esc_html($sku) . '</code></li>';
+                    }
+                }
+                echo '</ul></div>';
+            }
+            echo '</td>';
+
+            $skus = $log->failed_sku;
+            echo '<td>';
+            echo $skus;
+            echo '</td>';
+
             echo '</tr>';
         }
-
         echo '</tbody></table>';
 
         // Logs pagination
         $total_pages = ceil($total_logs / $per_page);
         if ($total_pages > 1) {
-            echo '<div class="tablenav"><div class="tablenav-pages">';
+            echo '<div class="tablenav" style="width: 98%;"><div class="tablenav-pages">';
             $base_url = remove_query_arg('paged_logs');
             if ($current_page > 1) {
                 $prev_page = add_query_arg('paged_logs', $current_page - 1, $base_url);

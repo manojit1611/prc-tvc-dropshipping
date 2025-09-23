@@ -16,12 +16,12 @@ if (!defined('ABSPATH')) {
 
 
 // === API Configuration ===
-define('TVC_PLUGIN_NAME_PREFIX', 'TVC');
 define('TVC_BASE_URL', 'https://openapi.tvc-mall.com');
 define('TVC_EMAIL', 'bharat@labxrepair.com.au');
 define('TVC_PASSWORD', 'Eik2Pea9@;??');
 define('TVC_MPI_PLUGIN_PATH', plugin_dir_path(__FILE__));
 define('TVC_MPI_PLUGIN_URL', plugin_dir_url(__FILE__));
+define('TVC_PLUGIN_NAME_PREFIX', 'Tvc');
 
 /**
  * Write messages to a dedicated log file: wp-content/tvc-sync.log
@@ -52,17 +52,17 @@ function ww_tvs_get_allowed_channel_product_cat_ids()
 function ww_tvs_get_allowed_channel_product_cats()
 {
     $cats = array();
-//    $cats[] = array('code' => "C0067", 'name' => "Cell Phone Accessories");
+    $cats[] = array('code' => "C0067", 'name' => "Cell Phone Accessories");
     $cats[] = array('code' => "C0037", 'name' => "Cell Phone Cases");
-//    $cats[] = array('code' => "C0060", 'name' => "Cell Phone Parts");
-//    $cats[] = array('code' => "C0005", 'name' => "Consumer Electronics");
-//    $cats[] = array('code' => "C0006", 'name' => "Computer & Networking");
-//    $cats[] = array('code' => "C0010", 'name' => "Sports & Outdoors");
-//    $cats[] = array('code' => "C0009", 'name' => "Home & Garden");
-//    $cats[] = array('code' => "C0004", 'name' => "Car Accessories");
-//    $cats[] = array('code' => "C0078", 'name' => "Smartwatch Accessories");
-//    $cats[] = array('code' => "C0077", 'name' => "Jewelry");
-//    $cats[] = array('code' => "C0092", 'name' => "Smart Publishing Level 1");
+    $cats[] = array('code' => "C0060", 'name' => "Cell Phone Parts");
+    $cats[] = array('code' => "C0005", 'name' => "Consumer Electronics");
+    $cats[] = array('code' => "C0006", 'name' => "Computer & Networking");
+    $cats[] = array('code' => "C0010", 'name' => "Sports & Outdoors");
+    $cats[] = array('code' => "C0009", 'name' => "Home & Garden");
+    $cats[] = array('code' => "C0004", 'name' => "Car Accessories");
+    $cats[] = array('code' => "C0078", 'name' => "Smartwatch Accessories");
+    $cats[] = array('code' => "C0077", 'name' => "Jewelry");
+    $cats[] = array('code' => "C0092", 'name' => "Smart Publishing Level 1");
     return $cats;
 }
 
@@ -300,12 +300,20 @@ add_action('admin_notices', function () {
 // === Includes ===
 require __DIR__ . '/includes/views/automate-product-cat.php';
 require __DIR__ . '/includes/views/automate-products.php';
+
 require_once TVC_MPI_PLUGIN_PATH . 'includes/class-mpi-admin.php';
 require_once TVC_MPI_PLUGIN_PATH . 'includes/class-mpi-api.php';
 require_once TVC_MPI_PLUGIN_PATH . 'includes/class-mpi-importer.php';
 require_once TVC_MPI_PLUGIN_PATH . 'includes/helpers.php';
 require_once TVC_MPI_PLUGIN_PATH . 'includes/tvc-flush-wooocommerce.php';
 require_once TVC_MPI_PLUGIN_PATH . 'includes/tvc-product-manipulation.php';
+
+require_once TVC_MPI_PLUGIN_PATH . 'includes/api/get-products-by-date.php';
+require_once TVC_MPI_PLUGIN_PATH . 'includes/api/get-products-by-manufacturer.php';
+
+require_once TVC_MPI_PLUGIN_PATH . 'includes/slider-shortcodes/shortcodes.php';
+
+require_once TVC_MPI_PLUGIN_PATH . 'includes/stock-qty-manipulation.php';
 
 
 // === Init Plugin ===
@@ -315,9 +323,6 @@ add_action('plugins_loaded', function () {
     new MPI_Importer();
 });
 
-
-// --- Hook must be registered immediately ---
-add_action('ww_import_child_level', 'ww_import_category_level', 10, 3);
 
 /**
  * Plugin Name: Assign Product to All Categories
@@ -380,306 +385,8 @@ function ww_delete_All_prodcuct_cat()
     });
 }
 
-// ✅ Enqueue Swiper once globally
-function custom_wc_enqueue_swiper()
-{
-    if (!wp_style_is('swiper', 'enqueued')) {
-        wp_enqueue_style('swiper', 'https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css', [], null);
-    }
-    if (!wp_script_is('swiper', 'enqueued')) {
-        wp_enqueue_script('swiper', 'https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js', ['jquery'], null, true);
-    }
-}
-
-add_action('wp_enqueue_scripts', 'custom_wc_enqueue_swiper');
-
-// ✅ Shared JS init
-function custom_wc_slider_init_js()
-{ ?>
-    <script>
-        jQuery(window).on('load', function () {
-            jQuery('.swiper.custom-slider').each(function () {
-                let el = jQuery(this);
-                let next = el.find('.swiper-button-next')[0];
-                let prev = el.find('.swiper-button-prev')[0];
-                new Swiper(this, {
-                    loop: false,
-                    spaceBetween: 20,
-                    navigation: {nextEl: next, prevEl: prev},
-                    breakpoints: {
-                        320: {slidesPerView: 2},
-                        768: {slidesPerView: 3},
-                        1024: {slidesPerView: 4},
-                        1400: {slidesPerView: 5}
-                    }
-                });
-            });
-        });
-    </script>
-<?php }
-
-add_action('wp_footer', 'custom_wc_slider_init_js', 99);
-
-// ✅ Shared styles
-function custom_wc_slider_styles()
-{ ?>
-    <style>
-        /* Slider container */
-        .custom-slider {
-            width: 1170px;
-            max-width: 100%;
-            padding: 30px 0;
-            margin-top: 40px;
-            position: relative;
-        }
-
-        /* Each card/slide */
-        .custom-slide {
-            background: #fff;
-            border-radius: 16px;
-            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.06);
-            text-align: center;
-            padding: 20px;
-            transition: transform .3s ease, box-shadow .3s ease;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            height: 100%;
-            text-align: left;
-            max-height: 370px;
-        }
-
-        /* Hover effect */
-        .custom-slide:hover {
-            transform: translateY(-6px) scale(1.02);
-            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.08);
-        }
-
-        /* Product image */
-        .custom-slide img {
-            max-width: 120px;
-            max-height: 120px;
-            margin: 0 auto 15px auto;
-            border-radius: 12px;
-            object-fit: contain;
-            transition: transform .3s ease;
-        }
-
-        .custom-slide:hover img {
-            transform: scale(1.05);
-        }
-
-        /* Titles */
-        .custom-slide h3,
-        .custom-slide h4 {
-            font-size: 16px;
-            color: #222;
-            font-weight: 600;
-            margin: 15px 0 10px;
-            line-height: 1.4;
-        }
-
-        /* Price / secondary info */
-        .custom-slide p {
-            font-size: 14px;
-            color: #666;
-            margin: 0;
-        }
-
-        /* Swiper buttons */
-        .custom-slider .swiper-button-next,
-        .custom-slider .swiper-button-prev {
-            width: 44px;
-            height: 44px;
-            background: #fff;
-            border-radius: 50%;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-            color: #333;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: all .3s ease;
-        }
-
-        .custom-slider .swiper-button-next:hover,
-        .custom-slider .swiper-button-prev:hover {
-            background: #0073aa;
-            color: #fff;
-            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
-        }
-
-        .custom-slider .swiper-button-next::after,
-        .custom-slider .swiper-button-prev::after {
-            font-size: 20px;
-            font-weight: bold;
-        }
-
-        @media (max-width: 768px) {
-            .custom-slider {
-                padding: 15px 0;
-            }
-
-            .custom-slide {
-                padding: 15px;
-            }
-
-            .custom-slider .swiper-button-prev,
-            .custom-slider .swiper-button-next {
-                display: none;
-            }
-        }
-
-        /* Add to Cart button styling */
-        .custom-slide .add-to-cart-btn {
-            display: inline-block;
-            background: #0073aa;
-            color: #fff;
-            padding: 10px 18px;
-            border-radius: 8px;
-            font-size: 14px;
-            font-weight: 600;
-            text-decoration: none;
-            transition: all .3s ease;
-        }
-
-        .custom-slide .add-to-cart-btn:hover {
-            background: #005f8d;
-            color: #fff;
-            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
-        }
-
-        .brand-slider .custom-slide {
-            text-align: center;
-        }
-
-        .brand-slider h4 {
-            margin: 0;
-        }
-    </style>
-<?php }
-
-add_action('wp_head', 'custom_wc_slider_styles');
-
-// ✅ Products slider
-function custom_wc_product_slider_shortcode($atts)
-{
-    $atts = shortcode_atts(['type' => 'recent', 'limit' => 8], $atts, 'product_slider');
-
-    $args = ['post_type' => 'product', 'posts_per_page' => intval($atts['limit']), 'post_status' => 'publish'];
-
-    if ($atts['type'] === 'featured') {
-        $args['tax_query'][] = ['taxonomy' => 'product_visibility', 'field' => 'name', 'terms' => 'featured'];
-    } elseif ($atts['type'] === 'recent') {
-        $args['orderby'] = 'date';
-        $args['order'] = 'DESC';
-    }
-
-    $products = new WP_Query($args);
-    if (!$products->have_posts()) return '<p>No products found.</p>';
-
-    ob_start(); ?>
-    <div class="swiper custom-slider product-slider">
-        <h4 style='margin-left:15px;'>Recent Products</h4>
-        <div class="swiper-wrapper">
-            <?php while ($products->have_posts()):$products->the_post();
-                global $product; ?>
-                <div class="swiper-slide">
-                    <a class="custom-slide" href="<?php the_permalink(); ?>">
-                        <?php echo $product->get_image(); ?>
-                        <h3>
-                            <?php
-                            $title = get_the_title();
-                            echo wp_trim_words($title, 20, '...');
-                            ?>
-                        </h3>
-                        <span class="price"><?php echo $product->get_price_html(); ?></span>
-                        <button href="<?php echo esc_url($product->add_to_cart_url()); ?>"
-                                class="add-to-cart-btn"
-                                data-product_id="<?php echo esc_attr($product->get_id()); ?>"
-                                data-quantity="1">
-                            <?php echo esc_html($product->add_to_cart_text()); ?>
-                        </button>
-
-                    </a>
-                </div>
-            <?php endwhile;
-            wp_reset_postdata(); ?>
-        </div>
-        <div class="swiper-button-next"></div>
-        <div class="swiper-button-prev"></div>
-    </div>
-    <?php return ob_get_clean();
-}
-
-add_shortcode('product_slider', 'custom_wc_product_slider_shortcode');
-
-// ✅ Brand slider
-function custom_wc_brand_slider_shortcode($atts)
-{
-    $atts = shortcode_atts(['taxonomy' => 'product_brand', 'limit' => 12], $atts, 'brand_slider');
-    $brands = get_terms(['taxonomy' => $atts['taxonomy'], 'hide_empty' => false, 'number' => intval($atts['limit'])]);
-    if (is_wp_error($brands) || empty($brands)) return '<p>No brands found.</p>';
-
-    ob_start(); ?>
-    <div class="swiper custom-slider brand-slider">
-        <h4 style='margin-left:15px;'>Shop by Brand</h4>
-        <div class="swiper-wrapper">
-            <?php foreach ($brands as $brand):
-                $thumb = get_term_meta($brand->term_id, 'thumbnail_id', true);
-                $img = $thumb ? wp_get_attachment_image_src($thumb, 'medium')[0] : wc_placeholder_img_src();
-                $link = get_term_link($brand); ?>
-                <div class="swiper-slide">
-                    <a class="custom-slide" href="<?php echo esc_url($link); ?>">
-                        <img src="<?php echo esc_url($img); ?>" alt="<?php echo esc_attr($brand->name); ?>">
-                        <h4><?php echo esc_html($brand->name); ?></h4>
-                    </a>
-                </div>
-            <?php endforeach; ?>
-        </div>
-        <div class="swiper-button-next"></div>
-        <div class="swiper-button-prev"></div>
-    </div>
-    <?php return ob_get_clean();
-}
-
-add_shortcode('brand_slider', 'custom_wc_brand_slider_shortcode');
-
-// ✅ Category slider
-function custom_wc_category_slider_shortcode($atts)
-{
-    $atts = shortcode_atts(['taxonomy' => 'product_cat', 'parent' => 0, 'limit' => 12], $atts, 'category_slider');
-    $categories = get_terms(['taxonomy' => $atts['taxonomy'], 'hide_empty' => false, 'number' => intval($atts['limit']), 'parent' => intval($atts['parent'])]);
-    if (is_wp_error($categories) || empty($categories)) return '<p>No categories found.</p>';
-
-    ob_start(); ?>
-    <div class="swiper custom-slider category-slider">
-        <h4 style='margin-left:15px;'>Shop by Category</h4>
-        <div class="swiper-wrapper">
-            <?php foreach ($categories as $cat):
-                if ($cat->term_id == 947) continue; //skip
-                $thumb = get_term_meta($cat->term_id, 'thumbnail_id', true);
-                $img = $thumb ? wp_get_attachment_image_src($thumb, 'medium')[0] : wc_placeholder_img_src();
-                $link = get_term_link($cat); ?>
-                <div class="swiper-slide">
-                    <a class="custom-slide" href="<?php echo esc_url($link); ?>">
-                        <img src="<?php echo esc_url($img); ?>" alt="<?php echo esc_attr($cat->name); ?>">
-                        <h4><?php echo esc_html($cat->name); ?></h4>
-                    </a>
-                </div>
-            <?php endforeach; ?>
-        </div>
-        <div class="swiper-button-next"></div>
-        <div class="swiper-button-prev"></div>
-    </div>
-    <?php return ob_get_clean();
-}
-
-add_shortcode('category_slider', 'custom_wc_category_slider_shortcode');
-
-
 // Logging import batches and errors
-function start_import_batch($batch_id)
-{
+function start_import_batch($batch_id) {
     global $wpdb;
     $batches_table = $wpdb->prefix . 'tvc_import_batches';
 
@@ -715,8 +422,7 @@ function start_import_batch($batch_id)
     return true; // inserted
 }
 
-function add_import_error_log($batch_id, $state, $error_log, $type)
-{
+function add_import_error_log($batch_id, $state, $sku, $type) {
     global $wpdb;
     $logs_table = $wpdb->prefix . 'tvc_import_logs';
     start_import_batch($batch_id);
@@ -726,7 +432,8 @@ function add_import_error_log($batch_id, $state, $error_log, $type)
         [
             'batch_id' => $batch_id,
             'status' => maybe_serialize($state),
-            'success_skus' => maybe_serialize($error_log),
+            'success_skus' => maybe_serialize($sku),
+            'failed_sku' => maybe_serialize($state['failed_records'] ?? []),
             'type' => $type,
         ],
         [
@@ -737,125 +444,4 @@ function add_import_error_log($batch_id, $state, $error_log, $type)
         ]
     );
 }
-
-// Add custom field for Minimum Order Qty in product backend
-add_action('woocommerce_product_options_inventory_product_data', 'add_min_order_qty_field');
-function add_min_order_qty_field()
-{
-    woocommerce_wp_text_input(array(
-        'id' => '_min_order_qty',
-        'label' => __('Minimum Order Quantity', 'woocommerce'),
-        'type' => 'number',
-        'custom_attributes' => array('min' => '1', 'step' => '1'),
-        'desc_tip' => true,
-        'description' => __('Enter the minimum quantity allowed for this product.', 'woocommerce')
-    ));
-}
-
-// Save the field value
-add_action('woocommerce_process_product_meta', 'save_min_order_qty_field');
-function save_min_order_qty_field($post_id)
-{
-    $min_qty = isset($_POST['_min_order_qty']) ? absint($_POST['_min_order_qty']) : '';
-    update_post_meta($post_id, '_min_order_qty', $min_qty);
-}
-
-// Enforce minimum quantity
-add_filter('woocommerce_add_to_cart_quantity', 'set_minimum_order_quantity', 10, 2);
-function set_minimum_order_quantity($quantity, $product_id)
-{
-    $min_qty = get_post_meta($product_id, '_min_order_qty', true);
-    if (!empty($min_qty) && $quantity < $min_qty) {
-        wc_add_notice(sprintf(__('The minimum quantity for %s is %d.', 'woocommerce'), get_the_title($product_id), $min_qty), 'error');
-        return $min_qty; // adjust automatically
-    }
-    return $quantity;
-}
-
-add_filter('woocommerce_product_stock_status_options', function ($status_options) {
-    $status_options['on_sale'] = __('On Sale', 'woocommerce');
-    $status_options['in_shortage'] = __('In Shortage', 'woocommerce');
-    $status_options['5_7_days'] = __('5-7 Days', 'woocommerce');
-    $status_options['7_10_days'] = __('7-10 Days', 'woocommerce');
-    return $status_options;
-});
-
-// Display custom stock status on product page
-add_filter('woocommerce_get_stock_html', function ($html, $product) {
-    $status = $product->get_stock_status();
-    if ($status == 'on_sale') return '<p class="stock in-shortage">On Sale</p>';
-    if ($status == 'in_shortage') return '<p class="stock in-shortage">In Shortage</p>';
-    if ($status == '5_7_days') return '<p class="stock on-order">5-7 Days</p>';
-    if ($status == '7_10_days') return '<p class="stock on-order">7-10 Days</p>';
-    return $html;
-}, 10, 2);
-
-add_action('rest_api_init', function () {
-    register_rest_route('mpi/v1', '/fetch-by-date-time', [
-        'methods' => 'GET', // or 'GET' if you prefer
-        'callback' => 'mpi_fetch_by_date_time_callback',
-        'permission_callback' => '__return_true', // restrict if needed
-    ]);
-});
-
-
-function mpi_fetch_by_date_time_callback(WP_REST_Request $request)
-{
-    // Optional: accept params (perPage, batch_id, etc.)
-    $perPage = $request->get_param('per_page') ?: 10;
-    $maxPages = $request->get_param('max_pages') ?: 1;
-
-    // Your existing importer + API
-    $importer = new MPI_Importer();
-    $api = new MPI_API();
-
-    $lastProductId = null;
-    $pageIndex = 1;
-
-    // Current date/time in WP timezone
-    $current_time = current_time('timestamp');
-
-    // Date window (last 15 minutes)
-    $beginDate = date('Y-m-d\TH:i:s', $current_time - (15 * 60));
-    $endDate = date('Y-m-d\TH:i:s', $current_time);
-
-    $allProducts = [];
-
-    do {
-        $products = $api->get_products_by_category_code(
-            null,
-            $lastProductId,
-            $perPage,
-            $pageIndex,
-            $beginDate,
-            $endDate
-        );
-
-        $importer->ww_update_detail_of_products($products);
-
-        $allProducts[] = $products; // store for response
-
-        $lastProductId = $products['lastProductId'] ?? null;
-        $pageIndex++;
-    } while ($pageIndex <= $maxPages);
-
-    return rest_ensure_response([
-        'status' => 'success',
-        'beginDate' => $beginDate,
-        'endDate' => $endDate,
-        'data' => $allProducts,
-    ]);
-}
-
-
-//ww_delete_All_prodcuct_cat();
-//add_action( 'woocommerce_before_main_content', function() {
-//    if ( is_shop() ) {
-//        wp_list_categories( array(
-//            'taxonomy'   => 'product_cat',
-//            'hide_empty' => false,  // 🔑 show empty categories
-//            'title_li'   => '',
-//        ) );
-//    }
-//}, 5 );
 

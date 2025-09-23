@@ -16,11 +16,11 @@ if (!defined('ABSPATH')) exit;
  * @param int $page_index Current page number.
  * @param string $last_product_id For APIs that require a lastProductId.
  */
-function ww_import_product_batch($batch_id, $category_code = '', $page_index = 1, $last_product_id = null, $beginDate = null, $endDate = null)
+function ww_import_product_batch($batch_id, $filters = [])
 {
     $lock_key = 'ww_product_sync_' . sanitize_key($batch_id);
     if (get_transient($lock_key)) {
-        tvc_sync_log("Batch $batch_id already running—skipped page $page_index.", 'product');
+        tvc_sync_log("Batch $batch_id already running—skipped page " . ($filters['page_index'] ?? 1) . ".", 'product');
         return;
     }
 
@@ -33,17 +33,17 @@ function ww_import_product_batch($batch_id, $category_code = '', $page_index = 1
 
         // ✅ Existing functions must be loaded elsewhere
         $products = $api->get_products_by_category_code(
-            $category_code,
-            $last_product_id,
+            $filters['category_code'] ?? '',
+            $filters['last_product_id'] ?? null,
             $per_page,
-            $page_index,
-            $beginDate,
-            $endDate
+            $filters['page_index'] ?? 1,
+            $filters['beginDate'] ?? null,
+            $filters['endDate'] ?? null
         );
 
         if (empty($products) || !empty($products['error'])) {
             tvc_sync_log(
-                "Batch $batch_id page $page_index error: " . print_r($products, true),
+                "Batch $batch_id page " . ($filters['page_index'] ?? 1) . " error: " . print_r($products, true),
                 'product'
             );
 
@@ -57,16 +57,16 @@ function ww_import_product_batch($batch_id, $category_code = '', $page_index = 1
 
         sleep(1);
         // Update WooCommerce products (your updater)
-        $importer->ww_update_detail_of_products($products, $batch_id);
+        $importer->ww_update_detail_of_products($products, $batch_id, $filters);
 
         if (!empty($products['lastProductId'])) {
             wp_schedule_single_event(
                 time() + 10,
                 'ww_import_product_batch',
-                [$batch_id, $category_code, $page_index + 1, $products['lastProductId']]
+                [$batch_id, $filters]
             );
 
-            tvc_sync_log("Batch $batch_id scheduled next page " . ($page_index + 1), 'product');
+            tvc_sync_log("Batch $batch_id scheduled next page " . ($filters['page_index'] + 1), 'product');
         } else {
             tvc_sync_log("Batch $batch_id completed.", 'product');
         }
@@ -94,8 +94,15 @@ function ww_start_product_import($category_code = '', $beginDate = null, $endDat
 //        'ww_import_product_batch',
 //        [$batch_id, $category_code, 1, null, $beginDate, $endDate]
 //    );
-
-    ww_import_product_batch($batch_id, $category_code, 1, null, $beginDate, $endDate);
+    $params = [
+        'category_code' => $category_code,
+        'page_index' => 1,
+        'last_product_id' => null,
+        'beginDate' => $beginDate,
+        'endDate' => $endDate
+    ];
+    
+    ww_import_product_batch($batch_id, $params);
     tvc_sync_log("Started new product batch $batch_id (category: $category_code)", 'product');
 }
 

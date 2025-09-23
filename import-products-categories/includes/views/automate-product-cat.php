@@ -76,6 +76,12 @@ function ww_import_category_level($batch_id, $parent_code = null, $parent_id = 0
                 continue;
             }
 
+            tvc_sync_log("Category data: " . print_r($cat, true));
+
+            // echo "<pre>";
+            // print_r($cat); // Debug output
+            // die;
+
             $name = sanitize_text_field($cat['Name']);
             $code = sanitize_text_field($cat['Code']);
             $slug = sanitize_title($name);
@@ -129,7 +135,7 @@ function ww_import_category_level($batch_id, $parent_code = null, $parent_id = 0
             // ✅ NEW: Only schedule if this category actually has sub-categories
             $child_cats = ww_get_categories_level($code);
             if (!empty($child_cats)) {
-                $delay = 3 + ($i * 2); // small stagger
+                $delay = 3 + ($i * 2);
                 if (!wp_next_scheduled('ww_import_child_level', [$batch_id, $code, $term_id])) {
                     wp_schedule_single_event(time() + $delay, 'ww_import_child_level', [$batch_id, $code, $term_id]);
                     tvc_sync_log("Scheduled child import for code {$code} (term {$term_id}) with +{$delay}s delay");

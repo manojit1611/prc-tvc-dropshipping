@@ -106,7 +106,7 @@ class MPI_Importer
      * @return true
      * Update Product Details
      */
-    function ww_update_detail_of_products($products, $batch_id = null)
+    function ww_update_detail_of_products($products, $batch_id = null, $filters = [])
     {
         global $wpdb;
         $success_count = 0;
@@ -148,7 +148,7 @@ class MPI_Importer
                 if (function_exists('category_exists_by_code')) {
                     $checkCategory = category_exists_by_code($tvc_product_data['CategoryCode']);
                     if (!$checkCategory) {
-                        $invalid_records[] = ['Category Code does not exist' . $tvc_product_data['CategoryCode'] => $sku];
+                        $invalid_records[] = ['Category Code does not exist ' . $tvc_product_data['CategoryCode'] => $sku];
                         // my_log_error('Category Code does not exist' . $tvc_product_data['CategoryCode']);
                         continue;
                     }
@@ -159,7 +159,7 @@ class MPI_Importer
     
                 $product = wc_get_product($product_id);
     
-                $this->update_tvc_products($p, $product_id, $tvc_product_data);
+                $this->update_tvc_product($p, $product_id, $tvc_product_data);
     
                 $this->update_additional_info($product_id, $tvc_product_data, $product, $model_list, $sku);
 
@@ -169,9 +169,11 @@ class MPI_Importer
             } catch (Exception $e) {
                 $failure_count++;
                 $stage = 'Failed';
-                // add_import_error_log($batch_id, $p['ItemNo'], $e->getMessage(), 'product');
+                $failedSku[] = $sku;
             }
         }
+
+        $failedSku = implode(',', $failedSku ?? []);
 
         $state = [
             'success' => $success_count,
@@ -180,6 +182,8 @@ class MPI_Importer
             'stage' => $stage,
             'invalid_records' => $invalid_records,
             'lastProductId' => $p['ProductId'] ?? null,
+            'failed_records' => $failedSku,
+            'filters' => $filters,
         ];
 
         add_import_error_log($batch_id, json_encode($state), json_encode($successfully_processed), 'product');
