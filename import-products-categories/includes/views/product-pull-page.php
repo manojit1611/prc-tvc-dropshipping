@@ -45,7 +45,7 @@
                 <tr>
                     <th scope="row"><label for="parent_category">Parent Category</label></th>
                     <td>
-                        <select required name="tvc_parent_category_code" id="parent_category" style="min-width: 250px;">
+                        <select required name="tvc_parent_category_code" class="select2" id="parent_category" style="min-width: 250px;">
                             <option value="">-- Select Parent Category --</option>
                             <?php
                             $parent_cats = ww_tvs_get_allowed_channel_product_cats();

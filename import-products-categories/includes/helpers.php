@@ -58,6 +58,45 @@ function ww_tvc_get_manufacturer_product_relation_table_name()
     return 'tvc_manufacturer_product_relation';
 }
 
+function ww_tvc_get_manufacturer_relation_table_name()
+{
+    return 'wp_tvc_manufacturer_relation';
+}
+
+/**
+ * @return string
+ * Model type Id
+ * This table will container
+ */
+function ww_tvc_get_model_type()
+{
+    return 2;
+}
+
+/**
+ * @return string
+ * Brand type Id
+ * This table will container
+ * brand*product relation
+ * model*product relation
+ */
+// function ww_tvc_get_brand_type()
+// {
+//     return 1;
+// }
+
+/**
+ * @return string
+ * Manufacturer type Id
+ * This table will container
+ * brand*product relation
+ * model*product relation
+ */
+function ww_tvc_get_manufacturer_type()
+{
+    return 1;
+}
+
 /**
  * Check if a WooCommerce product category exists by meta key
  *

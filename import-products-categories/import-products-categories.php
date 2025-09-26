@@ -28,11 +28,22 @@ define('TVC_PLUGIN_NAME_PREFIX', 'Tvc');
  * Writes to wp-content/tvc-sync.log by default,
  * or wp-content/tvc-sync-<type>.log if $type is provided.
  */
+// function tvc_sync_log($message, $type = "")
+// {
+//     $file = WP_CONTENT_DIR . '/tvc-sync.log';
+//     if ($type) {
+//         $file = WP_CONTENT_DIR . '/tvc-sync-' . $type . '.log';
+//     }
+//     $time = date('Y-m-d H:i:s');
+//     error_log("[{$time}] {$message}\n", 3, $file);
+// }
+
 function tvc_sync_log($message, $type = "")
 {
-    $file = WP_CONTENT_DIR . '/tvc-sync.log';
+    $date = date('Y-m-d');
+    $file = WP_CONTENT_DIR . '/logs/tvc-sync-' . $date . '.log';
     if ($type) {
-        $file = WP_CONTENT_DIR . '/tvc-sync-' . $type . '.log';
+        $file = WP_CONTENT_DIR . '/logs/tvc-sync-' . $type . '-' . $date . '.log';
     }
     $time = date('Y-m-d H:i:s');
     error_log("[{$time}] {$message}\n", 3, $file);
@@ -45,7 +56,6 @@ function tvc_sync_log($message, $type = "")
  */
 function ww_tvs_get_allowed_channel_product_cat_ids()
 {
-//    C0067 = Cell Phone Accessories
     return array_column(ww_tvs_get_allowed_channel_product_cats(), 'code');
 }
 
@@ -107,6 +117,11 @@ function ww_tvs_get_product_model_taxonomy_type()
 function ww_tvs_get_product_manufacturer_taxonomy_type()
 {
     return 'product_manufacturer';
+}
+
+function ww_tvs_get_product_brand_taxonomy_type()
+{
+    return 'product_brand';
 }
 
 /**
@@ -177,10 +192,8 @@ function ww_tvc_print_r($data = array(), $die = false)
 if (!function_exists('my_log_error')) {
     function my_log_error($message)
     {
-        // Path to wp-content/uploads directory
         $upload_dir = wp_upload_dir();
 
-        // Create a log file with date, e.g., custom-errors-2025-09-12.log
         $date = date('Y-m-d');
         $log_file = trailingslashit($upload_dir['basedir']) . "custom-errors-{$date}.log";
 
@@ -207,13 +220,12 @@ add_action('admin_menu', function () {
 });
 
 // Render the error log contents
-function render_error_logs()
-{
-    $upload_dir = wp_upload_dir();
-    $log_path = trailingslashit($upload_dir['basedir']);
+function render_error_logs() {
+    // Path to wp-content/logs folder
+    $log_path = trailingslashit( WP_CONTENT_DIR ) . 'logs/';
 
-    // Get all log files starting with custom-errors-
-    $files = glob($log_path . 'custom-errors-*.log');
+    // Get all log files starting with tvc-sync-product-
+    $files = glob($log_path . 'tvc-sync-product-*.log');
 
     echo '<div class="wrap"><h1>Error Logs</h1>';
 
@@ -224,7 +236,8 @@ function render_error_logs()
         echo '<select name="log_date">';
         foreach ($files as $file) {
             $filename = basename($file);
-            $date = str_replace(array('custom-errors-', '.log'), '', $filename);
+            // Extract just the date part
+            $date = str_replace(array('tvc-sync-product-', '.log'), '', $filename);
             $selected = (isset($_GET['log_date']) && $_GET['log_date'] === $date) ? 'selected' : '';
             echo '<option value="' . esc_attr($date) . '" ' . $selected . '>' . esc_html($date) . '</option>';
         }
@@ -235,7 +248,7 @@ function render_error_logs()
         // Display the selected log
         if (isset($_GET['log_date']) && !empty($_GET['log_date'])) {
             $selected_date = sanitize_text_field($_GET['log_date']);
-            $selected_file = $log_path . "custom-errors-{$selected_date}.log";
+            $selected_file = $log_path . "tvc-sync-product-{$selected_date}.log";
 
             if (file_exists($selected_file)) {
                 $logs = file_get_contents($selected_file);
@@ -245,7 +258,7 @@ function render_error_logs()
                 echo '</pre>';
 
                 // Clear log button
-                echo '<form method="post" style="margin-top:20px;">';
+                echo '<form method="post" style="margin-top:20px;" onsubmit="return confirm(\'Are you sure you want to clear this log?\');">';
                 echo '<input type="hidden" name="log_date" value="' . esc_attr($selected_date) . '">';
                 submit_button('Clear Logs', 'delete', 'clear_logs');
                 echo '</form>';
@@ -253,7 +266,7 @@ function render_error_logs()
                 // Handle clearing logs
                 if (isset($_POST['clear_logs']) && current_user_can('manage_options')) {
                     $clear_date = sanitize_text_field($_POST['log_date']);
-                    $clear_file = $log_path . "custom-errors-{$clear_date}.log";
+                    $clear_file = $log_path . "tvc-sync-product-{$clear_date}.log";
                     file_put_contents($clear_file, "");
                     echo '<div class="updated notice"><p>Logs cleared successfully.</p></div>';
                     echo '<script>window.location.reload();</script>';
@@ -309,12 +322,12 @@ require_once TVC_MPI_PLUGIN_PATH . 'includes/tvc-flush-wooocommerce.php';
 require_once TVC_MPI_PLUGIN_PATH . 'includes/tvc-product-manipulation.php';
 
 require_once TVC_MPI_PLUGIN_PATH . 'includes/api/get-products-by-date.php';
-require_once TVC_MPI_PLUGIN_PATH . 'includes/api/get-products-by-manufacturer.php';
+require_once TVC_MPI_PLUGIN_PATH . 'includes/api/get-manufacturer-by-post.php';
+require_once TVC_MPI_PLUGIN_PATH . 'includes/api/get-model-by-post.php';
 
 require_once TVC_MPI_PLUGIN_PATH . 'includes/slider-shortcodes/shortcodes.php';
 
 require_once TVC_MPI_PLUGIN_PATH . 'includes/stock-qty-manipulation.php';
-
 
 // === Init Plugin ===
 add_action('plugins_loaded', function () {
@@ -444,4 +457,22 @@ function add_import_error_log($batch_id, $state, $sku, $type) {
         ]
     );
 }
+
+function enqueue_select2_assets()
+{
+    // Select2 CSS
+    wp_enqueue_style( 'select2-css', 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css' );
+
+    // Select2 JS
+    wp_enqueue_script( 'select2-js', 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js', array('jquery'), null, true );
+
+    // Init script
+    wp_add_inline_script( 'select2-js', "
+        jQuery(document).ready(function($) {
+            $('select.select2').select2();
+        });
+    " );
+}
+add_action( 'admin_enqueue_scripts', 'enqueue_select2_assets' );
+
 

@@ -81,7 +81,7 @@ class MPI_Admin
             'mpi-admin-js',
             TVC_MPI_PLUGIN_URL . 'assets/js/script.js',
             ['jquery'],
-            '1.0',
+            '1.'+ rand(1,10),
             true
         );
 
@@ -137,7 +137,7 @@ class MPI_Admin
             ));
         }
         ob_start();
-        echo '<select required name="category_code[]" class="mpi-child-category">';
+        echo '<select required name="category_code[]" class="mpi-child-category select2">';
         echo '<option value="">-- Select Child Category --</option>';
         foreach ($childElements as $child) {
             echo '<option 
@@ -176,7 +176,7 @@ class MPI_Admin
         ]);
         if (!empty($children)) {
             ob_start();
-            echo '<select name="category_code" class="mpi-child-category">';
+            echo '<select name="category_code" class="mpi-child-category select2">';
             echo '<option value="">-- Select Child Category --</option>';
             foreach ($children as $child) {
                 $tvc_product_cat_code = get_term_meta($child->term_id, ww_tvs_get_meta_key_tvc_product_cat_code(), true);

@@ -55,14 +55,15 @@
                     redirect: false
                 },
                 success: function (response) {
+                    console.log(response);
                     if (response.success) {
-                        $('#ajax_result').html('✅ Product Updated');
+                        $('#ajax_result').html(response.data.msg);
                     } else {
-                        $('#ajax_result').html('❌ ' + response.data);
+                        $('#ajax_result').html(response.data.msg);
                     }
                 },
                 error: function () {
-                    $('#ajax_result').html('❌ Something went wrong.');
+                    $('#ajax_result').html('Something went wrong.');
                 }
             });
         });

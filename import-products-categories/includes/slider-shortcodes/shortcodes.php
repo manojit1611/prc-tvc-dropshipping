@@ -31,7 +31,8 @@ function custom_wc_slider_init_js()
 				responsive:{
 					0:{ items:3 },
 					600:{ items:2 },
-					1000:{ items:5 }
+					800: {items: 3},
+					1200:{ items:5 }
 				}
 			});
 		});
@@ -114,9 +115,15 @@ function custom_wc_slider_styles()
 			bottom: 0px !important;
 		}
 		
+		@media only screen and (min-width: 500px) {
+			.category_desktop {
+				display:block !important;
+			}
+		}
+		
 		@media only screen and (max-width: 500px) {
 			.woo-owl-slider {
-				 width: 400px;
+				 width: 400px !important;
 			}
 			
 			.woo-owl-slider .woocommerce ul li {
@@ -141,13 +148,29 @@ function custom_wc_slider_styles()
 			}
 			
 			.brand-slider ul li {
-				height: 150px !important;
+				height: 350px !important;
+			}
+			
+			.category_mobile {
+				display:block !important;
+			}
+			
+			.owl-prev, .owl-next {
+				display: none !important;	
+			}
+			
+			.brand-slider .owl-carousel {
+				height: 350px;
+			}
+			
+			.brand-slider .mobile {
+				display: block !important;
 			}
 		}
 		
 		@media only screen and (min-width: 481px) and (max-width: 768px) {
 			.woo-owl-slider {
-				 width: 740px;
+				 width: 740px !important;
 			}
 			
 			.woo-owl-slider .woocommerce ul li {
@@ -170,7 +193,41 @@ function custom_wc_slider_styles()
 			}
 			
 			.brand-slider ul li {
-				height: 400px !important;
+				height: 435px !important;
+			}
+			
+			.owl-prev, .owl-next {
+				display: none !important;	
+			}
+		}
+		
+		@media only screen and (min-width: 769px) and (max-width: 1024px) {
+			.woo-owl-slider {
+				 width: 980px !important;
+			}
+			
+			.custom-tabs-wrapper {
+				width: 980px;
+			}
+			
+			.woo-products ul li {
+				height: 310px;
+			}
+			
+			.brand-slider .mobile {
+				display: block;
+			}
+		}
+		
+		@media only screen and (min-width: 1024px) {
+			.brand-slider .desktop {
+				display: block !important;
+			}
+		}
+		
+		@media only screen and (min-width: 768px) {
+			.brand-slider .desktop {
+				display: block !important;
 			}
 		}
     </style>
@@ -210,8 +267,8 @@ function custom_new_arrival_slider_shortcode($atts)
     $args = [
 		'post_type' => 'product',
 		'posts_per_page' => 8,
-		'orderby' => 'date',
-		'order' => 'DESC',
+// 		'orderby' => 'date',
+// 		'order' => 'DESC',
 		'post_status' => 'publish'
 	];
 
@@ -237,7 +294,12 @@ add_shortcode('new_arrival', 'custom_new_arrival_slider_shortcode');
 function custom_wc_category_slider_shortcode($atts)
 {
 	?>
-    <div class="woo-owl-slider categories" style="margin-top: 15px;">
+    <div class="woo-owl-slider categories category_desktop" style="margin-top: 15px;display:none;">
+		<h4>Featured Categories</h4>
+		<?php echo do_shortcode('[product_categories limit=6 ]'); ?>
+	</div>
+
+	<div class="categories category_mobile" style="margin-top: 15px;display:none;">
 		<h4>Featured Categories</h4>
 		<?php echo do_shortcode('[product_categories limit=6 ]'); ?>
 	</div>
@@ -267,12 +329,14 @@ add_shortcode('specific_category_slider', 'custom_wc_specific_category_slider_sh
 
 function custom_wc_brand_slider_shortcode($atts) {
     $atts = shortcode_atts([
-        'taxonomy' => 'product_brand', // your brand taxonomy
+        'taxonomy' => 'product_brand', 
         'title'    => 'Our Brands',
-        'limit'    => 12,
+        'limit'    => 24, // multiples of 8 recommended
+        'per_row_desktop'  => 6,
+        'per_row_mobile'  => 3,
+        'rows'     => 2
     ], $atts, 'brand_slider');
 
-    // Get all terms for the brand taxonomy
     $brands = get_terms([
         'taxonomy'   => $atts['taxonomy'],
         'hide_empty' => false,
@@ -280,41 +344,94 @@ function custom_wc_brand_slider_shortcode($atts) {
     ]);
 
     if (empty($brands) || is_wp_error($brands)) return '<p>No brands found.</p>';
-    ?>
 
+    $desktop_per_slide = $atts['per_row_desktop'] * $atts['rows'];
+    $desktopChunks = array_chunk($brands, $desktop_per_slide);
+	
+	$mobile_per_slide = $atts['per_row_mobile'] * $atts['rows'];
+    $mobile_chunks = array_chunk($brands, $mobile_per_slide);
+
+    ob_start(); ?>
     <div class="woo-owl-slider brand-slider">
         <h4><?php echo esc_html($atts['title']); ?></h4>
         <div class="woocommerce columns-4">
-            <ul class='owl-carousel products'>
-				<div class='owl-stage-outer'>
-					<div class='owl-stage'>
-						<?php foreach ($brands as $brand):
-							// Get brand thumbnail if you have one
-							$thumb_id = get_term_meta($brand->term_id, 'thumbnail_id', true);
-							$img_url = $thumb_id ? wp_get_attachment_image_url($thumb_id, 'medium') : wc_placeholder_img_src();
-							$link = get_term_link($brand);
-						?>
-							<div class="owl-item cloned" style="width: 264px; margin-right: 20px;">
-								<li class="ast-article-single desktop-align-left tablet-align-left mobile-align-left product type-product post-785 status-publish instock product_cat-car-remote-control shipping-taxable purchasable product-type-simple item" style="
-    text-align: center;
-">
-									<div>
-										<a href="<?php echo esc_url($link); ?>">
-											<img src="<?php echo esc_url($img_url); ?>" alt="<?php echo esc_attr($brand->name); ?>">
-											<h5><?php echo esc_html($brand->name); ?></h5>
-										</a>
-									</div>
-								</li>
-							</div>
-						<?php endforeach; ?>
-					</div>
-				</div>
-			</ul>
+            <ul class="owl-carousel products desktop" style='display:none;';>
+                <?php foreach ($desktopChunks as $chunk): ?>
+                    <li class="item">
+                        <div class="brand-slide " style="padding: 20px;">
+                            <?php 
+                            $row_chunks = array_chunk($chunk, $atts['per_row_desktop']);
+                            foreach ($row_chunks as $row): ?>
+                                <div class="brand-row" style="display:flex; justify-content:center; gap:15px; margin-bottom:15px;">
+                                    <?php foreach ($row as $brand):
+                                        $thumb_id = get_term_meta($brand->term_id, 'thumbnail_id', true);
+                                        $img_url = $thumb_id ? wp_get_attachment_image_url($thumb_id, 'medium') : wc_placeholder_img_src();
+                                        $link = get_term_link($brand);
+                                    ?>
+                                        <div class="brand-item" style="text-align:center; width:200px;">
+                                            <a href="<?php echo esc_url($link); ?>">
+                                                <img src="<?php echo esc_url($img_url); ?>" alt="<?php echo esc_attr($brand->name); ?>" style="max-width:100%;">
+                                                <h5><?php echo esc_html($brand->name); ?></h5>
+                                            </a>
+                                        </div>
+                                    <?php endforeach; ?>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    </li>
+                <?php endforeach; ?>
+            </ul>
+			
+			<ul class="owl-carousel products mobile" style='display:none;';>
+                <?php foreach ($mobile_chunks as $chunk): ?>
+                    <li class="item">
+                        <div class="brand-slide " style="padding: 20px;">
+                            <?php 
+                            $row_chunks = array_chunk($chunk, $atts['per_row_mobile']);
+                            foreach ($row_chunks as $row): ?>
+                                <div class="brand-row" style="display:flex; justify-content:center; gap:15px; margin-bottom:15px;">
+                                    <?php foreach ($row as $brand):
+                                        $thumb_id = get_term_meta($brand->term_id, 'thumbnail_id', true);
+                                        $img_url = $thumb_id ? wp_get_attachment_image_url($thumb_id, 'medium') : wc_placeholder_img_src();
+                                        $link = get_term_link($brand);
+                                    ?>
+                                        <div class="brand-item" style="text-align:center; width:200px;">
+                                            <a href="<?php echo esc_url($link); ?>">
+                                                <img src="<?php echo esc_url($img_url); ?>" alt="<?php echo esc_attr($brand->name); ?>" style="max-width:100%;">
+                                                <h5><?php echo esc_html($brand->name); ?></h5>
+                                            </a>
+                                        </div>
+                                    <?php endforeach; ?>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    </li>
+                <?php endforeach; ?>
+            </ul>
         </div>
     </div>
-<?php
+
+    <script>
+    jQuery(document).ready(function($){
+        $('.woo-owl-slider .owl-carousel').owlCarousel({
+            items:1, // because each slide contains 2 rows × 4 columns already
+            loop:true,
+            margin:15,
+            nav:true,
+            dots:false,
+            autoplay:false,
+            navText:['‹','›']
+        });
+    });
+    </script>
+    <?php
+    return ob_get_clean();
 }
 add_shortcode('brand_slider', 'custom_wc_brand_slider_shortcode');
+
+
+
+
 
 function custom_fullwidth_banner_slider_shortcode($atts) {
     $atts = shortcode_atts([

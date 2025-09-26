@@ -47,8 +47,6 @@ function ww_import_product_batch($batch_id, $filters = [])
                 'product'
             );
 
-            //add_import_error_log($batch_id, $products, 'Empty Products or API Error', 'product');
-
             delete_transient($lock_key);
             return;
         } else {
@@ -60,6 +58,8 @@ function ww_import_product_batch($batch_id, $filters = [])
         $importer->ww_update_detail_of_products($products, $batch_id, $filters);
 
         if (!empty($products['lastProductId'])) {
+            $filters['last_product_id'] = $products['lastProductId'];
+
             wp_schedule_single_event(
                 time() + 10,
                 'ww_import_product_batch',
@@ -89,11 +89,12 @@ function ww_start_product_import($category_code = '', $beginDate = null, $endDat
 {
     $batch_id = wp_generate_uuid4(); // globally unique
 
-//    wp_schedule_single_event(
-//        time()+10,
-//        'ww_import_product_batch',
-//        [$batch_id, $category_code, 1, null, $beginDate, $endDate]
-//    );
+    // wp_schedule_single_event(
+    //  time()+10,
+    //  'ww_import_product_batch',
+    //  [$batch_id, $category_code, 1, null, $beginDate, $endDate]
+    // );
+
     $params = [
         'category_code' => $category_code,
         'page_index' => 1,
