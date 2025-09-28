@@ -16,69 +16,56 @@ if (!defined('ABSPATH')) exit;
  * @param int $page_index Current page number.
  * @param string $last_product_id For APIs that require a lastProductId.
  */
+// ---------- BACKGROUND WORKER ----------
 function ww_import_product_batch($batch_id, $filters = [])
 {
+    tvc_sync_log("SCHEDULED WORKER STARTED: Batch $batch_id And filter was " . print_r($filters, true));
+
     $lock_key = 'ww_product_sync_' . sanitize_key($batch_id);
     if (get_transient($lock_key)) {
-        tvc_sync_log("Batch $batch_id already running—skipped page " . ($filters['page_index'] ?? 1) . ".", 'product');
-        return;
+        return; // another batch already running
     }
+    set_transient($lock_key, 1, 120); // lock for 2 min
 
-    set_transient($lock_key, 1, 60); // lock for 2 minutes
+    $per_page = 5; // adjust as needed
+    $importer = new MPI_Importer();
+    $api = new MPI_API();
 
     try {
-        $per_page = 5;
-        $importer = new MPI_Importer();
-        $api = new MPI_API();
-
-        // ✅ Existing functions must be loaded elsewhere
         $products = $api->get_products_by_category_code(
             $filters['category_code'] ?? '',
             $filters['last_product_id'] ?? null,
             $per_page,
-            $filters['page_index'] ?? 1,
-            $filters['beginDate'] ?? null,
-            $filters['endDate'] ?? null
+            $filters['page_index'] ?? 1
         );
 
-        if (empty($products) || !empty($products['error'])) {
-            tvc_sync_log(
-                "Batch $batch_id page " . ($filters['page_index'] ?? 1) . " error: " . print_r($products, true),
-                'product'
-            );
-
+        if (empty($products['ProductItemNoList'])) {
+            tvc_sync_log("No more products to import. Batch $batch_id completed.", 'product');
             delete_transient($lock_key);
             return;
-        } else {
-            tvc_sync_log("Batch $batch_id products found to proceed." . count($products['ProductItemNoList']), 'product');
         }
 
-        sleep(1);
-        // Update WooCommerce products (your updater)
         $importer->ww_update_detail_of_products($products, $batch_id, $filters);
 
         if (!empty($products['lastProductId'])) {
+            // Prepare filters for the next batch
             $filters['last_product_id'] = $products['lastProductId'];
+            $filters['page_index'] = ($filters['page_index'] ?? 1) + 1;
 
-            wp_schedule_single_event(
-                time() + 10,
-                'ww_import_product_batch',
-                [$batch_id, $filters]
-            );
-
-            tvc_sync_log("Batch $batch_id scheduled next page " . ($filters['page_index'] + 1), 'product');
-        } else {
-            tvc_sync_log("Batch $batch_id completed.", 'product');
+            // Schedule the next batch via Action Scheduler
+            $delay_seconds = 100; // adjust delay as needed
+            if (function_exists('as_schedule_single_action')) {
+                as_schedule_single_action(time() + $delay_seconds, 'ww_import_product_batch', [$batch_id, $filters]);
+            }
         }
     } catch (Exception $e) {
-        tvc_sync_log("Batch $batch_id exception: " . $e->getMessage(), 'product');
+        error_log("Batch $batch_id exception: " . $e->getMessage());
     }
-
 
     delete_transient($lock_key);
 }
 
-add_action('ww_import_product_batch', 'ww_import_product_batch', 10, 4);
+add_action('ww_import_product_batch', 'ww_import_product_batch', 10, 2);
 
 /**
  * Kick off a new import.
@@ -88,13 +75,6 @@ add_action('ww_import_product_batch', 'ww_import_product_batch', 10, 4);
 function ww_start_product_import($category_code = '', $beginDate = null, $endDate = null)
 {
     $batch_id = wp_generate_uuid4(); // globally unique
-
-    // wp_schedule_single_event(
-    //  time()+10,
-    //  'ww_import_product_batch',
-    //  [$batch_id, $category_code, 1, null, $beginDate, $endDate]
-    // );
-
     $params = [
         'category_code' => $category_code,
         'page_index' => 1,
@@ -102,8 +82,14 @@ function ww_start_product_import($category_code = '', $beginDate = null, $endDat
         'beginDate' => $beginDate,
         'endDate' => $endDate
     ];
-    
-    ww_import_product_batch($batch_id, $params);
+
+    // Kick off the first background job
+    as_enqueue_async_action(
+        'ww_import_product_batch',
+        [$batch_id, $params]
+    );
+
+//    ww_import_product_batch($batch_id, $params);
     tvc_sync_log("Started new product batch $batch_id (category: $category_code)", 'product');
 }
 

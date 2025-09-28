@@ -8,18 +8,18 @@ add_filter('woocommerce_product_stock_status_options', function($status_options)
     return $status_options;
 });
 
-// Display custom stock status on product page
-add_filter('woocommerce_get_stock_html', function($html, $product) {
-    $status = $product->get_stock_status();
-    if ($status == 'on_sale') return '<p class="stock in-shortage">On Sale</p>';
-    if ($status == 'in_shortage') return '<p class="stock in-shortage">In Shortage</p>';
-    if ($status == '5_7_days') return '<p class="stock on-order">5-7 Days</p>';
-    if ($status == '7_10_days') return '<p class="stock on-order">7-10 Days</p>';
-    return $html;
-}, 10, 2);
+// Display custom stock status on the product page
+//add_filter('woocommerce_get_stock_html', function($html, $product) {
+//    $status = $product->get_stock_status();
+//    if ($status == 'on_sale') return '<p class="stock in-shortage">On Sale</p>';
+//    if ($status == 'in_shortage') return '<p class="stock in-shortage">In Shortage</p>';
+//    if ($status == '5_7_days') return '<p class="stock on-order">5-7 Days</p>';
+//    if ($status == '7_10_days') return '<p class="stock on-order">7-10 Days</p>';
+//    return $html;
+//}, 10, 2);
 
 
-// Add custom field for Minimum Order Qty in product backend
+// Add custom field for Minimum Order Qty in the product backend
 add_action('woocommerce_product_options_inventory_product_data', 'add_min_order_qty_field');
 function add_min_order_qty_field() {
     woocommerce_wp_text_input( array(

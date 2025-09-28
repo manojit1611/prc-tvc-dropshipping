@@ -15,6 +15,36 @@ if (!defined('ABSPATH')) {
 }
 
 
+
+
+//if (defined('WP_CLI') && WP_CLI) {
+//    WP_CLI::add_command('ww import-all', function ($args) {
+//        // $args[0] = category code
+//        $category = $args[0] ?? '';
+//
+//
+//        // Delete all scheduled batches
+////        ww_clear_all_product_batches();
+////        WP_CLI::success( "All ww_import_product_batch jobs deleted.");
+////        return;
+//
+//
+//        if (empty($category)) {
+//            WP_CLI::error('Please provide a category code. Example: wp ww import-all shoes');
+//        }
+//
+//        // Kick off first batch exactly like the admin page does
+//        ww_start_product_import($category);
+////        as_enqueue_async_action(
+////            'ww_import_product_batch',
+////            [ uniqid( 'batch_', true ), [ 'category_code' => $category, 'page_index' => 1 ] ]
+////        );
+//
+//        WP_CLI::success("Import started for category: $category");
+//    });
+//}
+
+
 // === API Configuration ===
 define('TVC_BASE_URL', 'https://openapi.tvc-mall.com');
 define('TVC_EMAIL', 'bharat@labxrepair.com.au');
@@ -220,9 +250,10 @@ add_action('admin_menu', function () {
 });
 
 // Render the error log contents
-function render_error_logs() {
+function render_error_logs()
+{
     // Path to wp-content/logs folder
-    $log_path = trailingslashit( WP_CONTENT_DIR ) . 'logs/';
+    $log_path = trailingslashit(WP_CONTENT_DIR) . 'logs/';
 
     // Get all log files starting with tvc-sync-product-
     $files = glob($log_path . 'tvc-sync-product-*.log');
@@ -310,7 +341,12 @@ add_action('admin_notices', function () {
     }
 });
 
+
 // === Includes ===
+require_once TVC_MPI_PLUGIN_PATH . 'includes/table/create_table.php';
+//add_action('init', function () {
+//    tvc_plugin_create_tables();
+//});
 require __DIR__ . '/includes/views/automate-product-cat.php';
 require __DIR__ . '/includes/views/automate-products.php';
 
@@ -337,69 +373,9 @@ add_action('plugins_loaded', function () {
 });
 
 
-/**
- * Plugin Name: Assign Product to All Categories
- * Description: Assigns a specific product to every WooCommerce product category (including empty ones).
- */
-
-// Run this once (or hook to an admin action) and then remove/disable the plugin.
-add_action('init', function () {
-    return;
-
-    // 🔧 Replace with the actual product ID you want to update
-    $product_id = 123;  // e.g., 123 is the product's post ID
-
-    if (!$product_id) {
-        return;
-    }
-
-    // ✅ Get all product categories, including empty ones
-    $all_cats = get_terms(array(
-        'taxonomy' => 'product_cat',
-        'hide_empty' => false,
-        'fields' => 'ids',     // only need IDs
-    ));
-
-    if (empty($all_cats) || is_wp_error($all_cats)) {
-        error_log('No product categories found.');
-        return;
-    }
-
-    // ✅ Assign product to all categories
-    wp_set_post_terms($product_id, $all_cats, 'product_cat');
-
-    // Optional: log confirmation
-    error_log('Product ' . $product_id . ' assigned to categories: ' . implode(',', $all_cats));
-});
-
-function ww_delete_All_prodcuct_cat()
-{
-    add_action('init', function () {
-        if (!current_user_can('manage_woocommerce')) {
-            return; // Safety check
-        }
-
-        $terms = get_terms(array(
-            'taxonomy' => 'product_cat',
-            'hide_empty' => false,
-            'fields' => 'ids',
-        ));
-
-        if (empty($terms) || is_wp_error($terms)) {
-            error_log('No product_cat terms found.');
-            return;
-        }
-
-        foreach ($terms as $term_id) {
-            wp_delete_term($term_id, 'product_cat');
-        }
-
-        error_log('All product categories deleted.');
-    });
-}
-
 // Logging import batches and errors
-function start_import_batch($batch_id) {
+function start_import_batch($batch_id)
+{
     global $wpdb;
     $batches_table = $wpdb->prefix . 'tvc_import_batches';
 
@@ -435,7 +411,8 @@ function start_import_batch($batch_id) {
     return true; // inserted
 }
 
-function add_import_error_log($batch_id, $state, $sku, $type) {
+function add_import_error_log($batch_id, $state, $sku, $type)
+{
     global $wpdb;
     $logs_table = $wpdb->prefix . 'tvc_import_logs';
     start_import_batch($batch_id);
@@ -461,18 +438,19 @@ function add_import_error_log($batch_id, $state, $sku, $type) {
 function enqueue_select2_assets()
 {
     // Select2 CSS
-    wp_enqueue_style( 'select2-css', 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css' );
+    wp_enqueue_style('select2-css', 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css');
 
     // Select2 JS
-    wp_enqueue_script( 'select2-js', 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js', array('jquery'), null, true );
+    wp_enqueue_script('select2-js', 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js', array('jquery'), null, true);
 
     // Init script
-    wp_add_inline_script( 'select2-js', "
+    wp_add_inline_script('select2-js', "
         jQuery(document).ready(function($) {
             $('select.select2').select2();
         });
-    " );
+    ");
 }
-add_action( 'admin_enqueue_scripts', 'enqueue_select2_assets' );
+
+add_action('admin_enqueue_scripts', 'enqueue_select2_assets');
 
 

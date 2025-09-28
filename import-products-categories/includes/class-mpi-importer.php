@@ -8,7 +8,10 @@ class MPI_Importer
 
     public function __construct()
     {
+
         add_action('init', [$this, 'register_custom_taxonomies']);
+        add_filter('term_link', [$this, 'custom_model_term_link'], 10, 3);
+        add_action('init', [$this, 'add_custom_rewrite_rules']);
 
         add_action('wp_ajax_product_fetch', [$this, 'ww_ajax_product_save_update']);
         // For non-logged-in users
@@ -21,31 +24,10 @@ class MPI_Importer
 
     public function register_custom_taxonomies()
     {
-        register_taxonomy(
-            ww_tvs_get_product_model_taxonomy_type(), // Taxonomy slug
-            'product',       // Attach to WooCommerce products
-            array(
-                'labels' => array(
-                    'name' => 'Product Models',
-                    'singular_name' => 'Product Model',
-                    'search_items' => 'Search Models',
-                    'all_items' => 'All Models',
-                    'edit_item' => 'Edit Model',
-                    'update_item' => 'Update Model',
-                    'add_new_item' => 'Add New Model',
-                    'new_item_name' => 'New Model Name',
-                    'menu_name' => 'Product Models',
-                ),
-                'hierarchical' => true, // true = like categories, false = like tags
-                'show_ui' => true,
-                'show_admin_column' => true,
-                'query_var' => true,
-                'rewrite' => array('slug' => 'product-model'),
-            )
-        );
 
+        // Manufacturer
         register_taxonomy(
-            ww_tvs_get_product_manufacturer_taxonomy_type(), // Taxonomy slug
+            'product_manufacturer',
             'product',
             array(
                 'labels' => array(
@@ -60,11 +42,94 @@ class MPI_Importer
                     'menu_name' => 'Manufacturers',
                 ),
                 'hierarchical' => true,
+                'public' => true,
                 'show_ui' => true,
                 'show_admin_column' => true,
                 'query_var' => true,
+                'rewrite' => array('slug' => 'manufacturer'),
             )
         );
+
+        // Model
+        register_taxonomy(
+            'product_model',
+            'product',
+            array(
+                'labels' => array(
+                    'name' => 'Product Models',
+                    'singular_name' => 'Product Model',
+                    'search_items' => 'Search Models',
+                    'all_items' => 'All Models',
+                    'edit_item' => 'Edit Model',
+                    'update_item' => 'Update Model',
+                    'add_new_item' => 'Add New Model',
+                    'new_item_name' => 'New Model Name',
+                    'menu_name' => 'Product Models',
+                ),
+                'hierarchical' => true,
+                'public' => true,
+                'show_ui' => true,
+                'show_admin_column' => true,
+                'query_var' => true,
+                // Base slug will be overridden dynamically per manufacturer
+                'rewrite' => array('slug' => 'manufacturer', 'with_front' => false, 'hierarchical' => true),
+            )
+        );
+    }
+
+    // ======== Rewrite /manufacturer/{manufacturer}/{model}/ ========
+    public function add_custom_rewrite_rules()
+    {
+        add_rewrite_rule(
+            '^manufacturer/([^/]+)/([^/]+)/?$',
+            'index.php?product_model=$matches[2]',
+            'top'
+        );
+
+        add_rewrite_rule(
+            '^manufacturer/([^/]+)/?$',
+            'index.php?product_manufacturer=$matches[1]',
+            'top'
+        );
+    }
+
+    function get_model_manufacturer($model_term_id)
+    {
+        global $wpdb;
+
+        // Table name
+        $table_name = $wpdb->prefix . 'tvc_manufacturer_relation';
+
+        // Query the manufacturer for this model
+        $manufacturer = $wpdb->get_row(
+            $wpdb->prepare(
+                "SELECT parent_id 
+             FROM $table_name 
+             WHERE term_id = %d AND type = 2 
+             LIMIT 1",
+                $model_term_id
+            )
+        );
+
+        return $manufacturer->parent_id ?? false;
+    }
+
+
+    // ======== Generate correct links for product_model term ========
+    public function custom_model_term_link($url, $term, $taxonomy)
+    {
+        if ($taxonomy === 'product_model') {
+            // Get manufacturer ID stored in term meta
+//            $manufacturer_id = get_term_meta($term->term_id, 'manufacturer_id', true);
+            $manufacturer_id = $this->get_model_manufacturer($term->term_id);
+            if ($manufacturer_id) {
+                $manufacturer = get_term($manufacturer_id, 'product_manufacturer');
+                if ($manufacturer && !is_wp_error($manufacturer)) {
+                    $url = home_url('manufacturer/' . $manufacturer->slug . '/' . $term->slug);
+                }
+            }
+        }
+        return $url;
     }
 
     public function import_categories($categories)
@@ -114,6 +179,7 @@ class MPI_Importer
         $failure_count = 0;
         $stage = 'Scheduled';
         $invalid_records = [];
+        $successfully_processed = [];
 
         foreach ($products['ProductItemNoList'] as $p) {
             try {
@@ -124,8 +190,8 @@ class MPI_Importer
                 $response = json_decode($body, true);
 
                 // Safely get 'Detail'
-                $tvc_product_data = isset($response['Detail']) && is_array($response['Detail']) 
-                    ? $response['Detail'] 
+                $tvc_product_data = isset($response['Detail']) && is_array($response['Detail'])
+                    ? $response['Detail']
                     : [];
 
                 // Safely get 'ModelList'
@@ -142,7 +208,7 @@ class MPI_Importer
                     // my_log_error('Empty Product' . $tvc_product_data);
                     continue;
                 }
-    
+
                 if (function_exists('category_exists_by_code')) {
                     $checkCategory = category_exists_by_code($tvc_product_data['CategoryCode']);
                     if (!$checkCategory) {
@@ -151,13 +217,13 @@ class MPI_Importer
                         continue;
                     }
                 }
-    
+
                 $product_id = $this->save_update_products($tvc_product_data, $sku);
-    
+
                 $product = wc_get_product($product_id);
-    
+
                 $this->update_tvc_products($p, $product_id, $tvc_product_data);
-    
+
                 $this->update_additional_info($product_id, $tvc_product_data, $product, $model_list, $sku);
 
                 $successfully_processed[] = $sku;
@@ -274,7 +340,7 @@ class MPI_Importer
 
             wp_send_json_success([
                 'success' => false,
-                'msg'    => $msg,
+                'msg' => $msg,
             ]);
             exit;
         };
@@ -502,7 +568,7 @@ class MPI_Importer
         $product_id = $product->save();
         $this->syncProductState['base_details'] = [
             'succ' => 1,
-            'error'=> ""
+            'error' => ""
         ];
 
         return $product_id;
@@ -580,11 +646,11 @@ class MPI_Importer
 
                 if (!$manufacturer_exists) {
                     $manufacturerRow = [
-                        'term_id'   => (int) $id,
+                        'term_id' => (int)$id,
                         'parent_id' => 0,
-                        'type'      => $manufacturer_type_flag,
+                        'type' => $manufacturer_type_flag,
                     ];
-    
+
                     $wpdb->insert(
                         $table,
                         $manufacturerRow,
@@ -606,9 +672,9 @@ class MPI_Importer
 
                 if (!$model_exists) {
                     $modelRow = [
-                        'term_id'   => (int) $modelIds[$key],
+                        'term_id' => (int)$modelIds[$key],
                         'parent_id' => $lastId,
-                        'type'      => $model_type_flag,
+                        'type' => $model_type_flag,
                     ];
 
                     $wpdb->insert(
@@ -805,7 +871,7 @@ class MPI_Importer
             if ($list['Brand'] == $list['Model']) {
                 continue;
             }
-            
+
             // Save update further models
             $model_name = sanitize_text_field($list['Model']);
             $model_slug = sanitize_title($model_name);
@@ -889,15 +955,15 @@ class MPI_Importer
             foreach ($data['SpecificationList'] as $attr) {
                 $attr_name = sanitize_title($attr['Name']); // e.g. "Color"
                 $attr_value = sanitize_text_field($attr['Value']); // e.g. "Red"
-    
+
                 if ($attr_name == 'brand') {
                     $brand_taxonomy = ww_tvs_get_product_brand_taxonomy_type();
                     $brand_name = $attr_value;
                     $brand_slug = sanitize_title($attr_value);
-                    
+
                     //  Check if a brand exists
                     $existing_term = get_term_by('slug', $brand_slug, $brand_taxonomy);
-        
+
                     if ($existing_term) {
                         // Update the existing brand (name, slug or description)
                         wp_update_term($existing_term->term_id, $brand_taxonomy, [
@@ -913,17 +979,17 @@ class MPI_Importer
                             ['slug' => $brand_slug]
                         );
                     }
-    
+
                     if (!empty($brand_ids)) {
                         wp_set_object_terms($product_id, $brand_ids, $brand_taxonomy);
                     }
                 }
-    
+
                 if (!in_array($attr_name, ['color', 'material', 'packaging-type', 'colorstyle', 'quick-charge'])) continue;
-    
+
                 // WooCommerce attribute taxonomy key must start with pa_
                 $taxonomy = 'pa_' . $attr_name;
-    
+
                 // ✅ Create attribute taxonomy if it doesn’t exist
                 //            if (!taxonomy_exists($taxonomy)) {
                 //                register_taxonomy($taxonomy, ['product'], [
@@ -934,7 +1000,7 @@ class MPI_Importer
                 //                    'rewrite' => ['slug' => $attr_name],
                 //                ]);
                 //            }
-    
+
                 // ✅ Insert term (attribute value) if not exists
                 $term = get_term_by('name', $attr_value, $taxonomy);
                 if (!$term) {
@@ -945,12 +1011,12 @@ class MPI_Importer
                 } else {
                     $term_id = $term->term_id;
                 }
-    
+
                 // ✅ Assign the term to the product
                 if (!empty($term_id)) {
                     wp_set_object_terms($product_id, [(int)$term_id], $taxonomy, true);
                 }
-    
+
                 // ✅ Prepare attribute object
                 $attribute = new WC_Product_Attribute();
                 $attribute->set_id(wc_attribute_taxonomy_id_by_name($taxonomy));
@@ -958,16 +1024,16 @@ class MPI_Importer
                 $attribute->set_options([$attr_value]);
                 $attribute->set_visible(true);
                 $attribute->set_variation(false);
-    
+
                 $attributes_data[$taxonomy] = $attribute;
             }
-    
+
             // ✅ Save attributes to product
             if (!empty($attributes_data)) {
                 $product->set_attributes($attributes_data);
                 $product->save();
             }
-    
+
             $this->syncProductState['attributes'] = [
                 'succ' => 1,
                 'error' => ''

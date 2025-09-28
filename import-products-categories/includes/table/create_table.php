@@ -2,7 +2,8 @@
 
 register_activation_hook(__FILE__, 'tvc_plugin_create_tables');
 
-function tvc_plugin_create_tables() {
+function tvc_plugin_create_tables()
+{
     global $wpdb;
     require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
 
@@ -63,9 +64,9 @@ function tvc_plugin_create_tables() {
         success_skus LONGTEXT NULL,
         type VARCHAR(100) NULL,
         failed_sku LONGTEXT NULL,
-        PRIMARY KEY (id),
-        KEY batch_id (batch_id)
+        PRIMARY KEY (id)
     ) $charset_collate;";
+
 
     // Table 6: Import Batches
     $table6 = $wpdb->prefix . 'tvc_import_batches';
@@ -73,8 +74,7 @@ function tvc_plugin_create_tables() {
         id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
         batch_id LONGTEXT NULL,
         date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY (id),
-        KEY batch_id (batch_id)
+        PRIMARY KEY (id)
     ) $charset_collate;";
 
     // Run dbDelta on each table SQL
@@ -85,6 +85,6 @@ function tvc_plugin_create_tables() {
     dbDelta($sql5);
     dbDelta($sql6);
 
-    // Save db version so you can do incremental migrations later
+    // Save the db version so you can do incremental migrations later
     update_option('tvc_plugin_db_version', '1.0');
 }

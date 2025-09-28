@@ -35,7 +35,7 @@ function ww_import_category_level($batch_id, $parent_code = null, $parent_id = 0
 {
     $parent_desc = $parent_code ? $parent_code : 'TOP-LEVEL';
     tvc_sync_log("Starting run for parent: {$parent_desc}");
-    $stage = 'Scheduled'; 
+    $stage = 'Scheduled';
 
     // Simple global lock to avoid concurrent runs
     // $lock_key = 'tvc_sync_running';
@@ -68,7 +68,7 @@ function ww_import_category_level($batch_id, $parent_code = null, $parent_id = 0
         $created_count = 0;
         $invalid_records = [];
         foreach ($categories as $cat) {
-            $stage = 'Processing'; 
+            $stage = 'Processing';
 
             if (empty($cat['Name']) || empty($cat['Code'])) {
                 $invalid_records[] = $cat;
@@ -151,7 +151,7 @@ function ww_import_category_level($batch_id, $parent_code = null, $parent_id = 0
         $stage = 'Completed';
     } catch (Exception $e) {
         $failure_count++;
-        $stage = 'Failed'; 
+        $stage = 'Failed';
 
         tvc_sync_log("Exception during import for parent {$parent_desc}: " . $e->getMessage());
     }
@@ -196,7 +196,7 @@ function ww_start_category_sync_now($parent_code = null, $parent_id = 0)
     }
 }
 
-register_activation_hook(__FILE__, 'ww_start_category_sync_now');
+//register_activation_hook(__FILE__, 'ww_start_category_sync_now');
 
 /**
  * Utility: clear all scheduled child events.
