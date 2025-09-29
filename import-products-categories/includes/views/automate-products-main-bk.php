@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Plugin Name: WW Product Batch Import
  * Description: Fetches all products from the external API in background batches with unique locks—no WP-Cron setup required.
@@ -88,11 +89,11 @@ function ww_start_product_import($category_code = '', $beginDate = null, $endDat
 {
     $batch_id = wp_generate_uuid4(); // globally unique
 
-//    wp_schedule_single_event(
-//        time()+10,
-//        'ww_import_product_batch',
-//        [$batch_id, $category_code, 1, null, $beginDate, $endDate]
-//    );
+    //    wp_schedule_single_event(
+    //        time()+10,
+    //        'ww_import_product_batch',
+    //        [$batch_id, $category_code, 1, null, $beginDate, $endDate]
+    //    );
 
     ww_import_product_batch($batch_id, $category_code, 1, null, $beginDate, $endDate);
     tvc_sync_log("Started new product batch $batch_id (category: $category_code)", 'product');

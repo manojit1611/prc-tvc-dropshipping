@@ -66,7 +66,7 @@ class MPI_API
 
         // Base API URL
         $api_url = TVC_BASE_URL . "/openapi/Product/Search?pageSize=" . intval($perPage)
-                . "&pageIndex=" . intval($pageIndex);
+            . "&pageIndex=" . intval($pageIndex);
 
         if (!empty($categoryCode)) {
             $api_url .= "&CategoryCode=" . urlencode($categoryCode);
@@ -103,5 +103,40 @@ class MPI_API
         $data = json_decode($body, true);
 
         return $data;
+    }
+
+    function ww_tvc_get_shipping_rate_by_sku($sku)
+    {
+        $token = $this->mpi_get_auth_token();
+
+        if (!$token) return ['error' => 'Failed to retrieve authentication token'];
+
+        $api_url = TVC_BASE_URL . "/order/shippingcostenhancement";
+
+        $body = [
+            "skuinfo"          => $sku . "*" . 1,
+            "countrycode"      => "AU",
+            'currency'         => 'AUD'
+        ];
+
+        $args = [
+            'headers' => [
+                'Accept'        => 'application/json',
+                'Content-Type'  => 'application/json', // important for JSON payload
+                'Authorization' => 'TVC ' . $token,
+            ],
+            'timeout' => 30,
+            'body'    => wp_json_encode($body), // convert array to JSON
+        ];
+
+        $response = wp_remote_post($api_url, $args);
+
+        if (is_wp_error($response)) {
+            return ['error' => $response->get_error_message()];
+        }
+
+        $body = wp_remote_retrieve_body($response);
+
+        return $body;
     }
 }

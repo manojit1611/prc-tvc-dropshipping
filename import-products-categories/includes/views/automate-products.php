@@ -89,7 +89,9 @@ function ww_start_product_import($category_code = '', $beginDate = null, $endDat
         [$batch_id, $params]
     );
 
-//    ww_import_product_batch($batch_id, $params);
+    // ww_import_product_batch($batch_id, $params);
+
+    //    ww_import_product_batch($batch_id, $params);
     tvc_sync_log("Started new product batch $batch_id (category: $category_code)", 'product');
 }
 

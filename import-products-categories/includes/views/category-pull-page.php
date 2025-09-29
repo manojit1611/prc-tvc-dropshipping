@@ -220,7 +220,7 @@ if (isset($_POST['parent_category_code'])) {
     if (!empty($all_child_cats)) {
         $last_created_term = $existing_parent; // keep parent first always
         foreach ($all_child_cats as $index => $cat) {
-            ww_tvc_print_r($last_created_term);
+            // ww_tvc_print_r($last_created_term);
             $parent_id = $last_created_term->term_id;
 
             // Validate status

@@ -52,6 +52,7 @@ define('TVC_PASSWORD', 'Eik2Pea9@;??');
 define('TVC_MPI_PLUGIN_PATH', plugin_dir_path(__FILE__));
 define('TVC_MPI_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('TVC_PLUGIN_NAME_PREFIX', 'Tvc');
+define('TVC_IMAGE_BASE_URL', 'https://img.tvc-mall.com');
 
 /**
  * Write messages to a dedicated log file: wp-content/tvc-sync.log
@@ -68,16 +69,31 @@ define('TVC_PLUGIN_NAME_PREFIX', 'Tvc');
 //     error_log("[{$time}] {$message}\n", 3, $file);
 // }
 
-function tvc_sync_log($message, $type = "")
-{
-    $date = date('Y-m-d');
-    $file = WP_CONTENT_DIR . '/logs/tvc-sync-' . $date . '.log';
-    if ($type) {
-        $file = WP_CONTENT_DIR . '/logs/tvc-sync-' . $type . '-' . $date . '.log';
+function tvc_sync_log($message, $type = 'general') {
+    if (!function_exists('wc_get_logger')) {
+        // Fallback if WooCommerce not active
+        error_log("[TVC Sync] " . $message);
+        return;
     }
-    $time = date('Y-m-d H:i:s');
-    error_log("[{$time}] {$message}\n", 3, $file);
+
+    $logger = wc_get_logger();
+    $context = array('source' => 'tvc-sync-' . $type); 
+    // 'source' defines the log file name in WooCommerce logs
+
+    $logger->info($message, $context);
 }
+
+
+// function tvc_sync_log($message, $type = "")
+// {
+//     $date = date('Y-m-d');
+//     $file = WP_CONTENT_DIR . '/logs/tvc-sync-' . $date . '.log';
+//     if ($type) {
+//         $file = WP_CONTENT_DIR . '/logs/tvc-sync-' . $type . '-' . $date . '.log';
+//     }
+//     $time = date('Y-m-d H:i:s');
+//     error_log("[{$time}] {$message}\n", 3, $file);
+// }
 
 /**
  * @return string[]
