@@ -7,141 +7,213 @@ $batches = $wpdb->get_results("SELECT batch_id, created_at FROM $batches_table O
 
 $current_batch = isset($_GET['batch_id']) ? sanitize_text_field($_GET['batch_id']) : '';
 
-// Handle delete batch request
-if ( isset($_GET['delete_batch']) && !empty($_GET['delete_batch']) ) {
+if (isset($_GET['delete_batch']) && !empty($_GET['delete_batch'])) {
     $batch_id = sanitize_text_field($_GET['delete_batch']);
-    if ( wp_verify_nonce($_GET['_wpnonce'], 'delete_batch_' . $batch_id) ) {
+    if (wp_verify_nonce($_GET['_wpnonce'], 'delete_batch_' . $batch_id)) {
         // delete logs first
         $wpdb->delete($logs_table, ['batch_id' => $batch_id]);
         // delete batch
         $wpdb->delete($batches_table, ['batch_id' => $batch_id]);
         // redirect to avoid resubmission
-        wp_safe_redirect(remove_query_arg(['delete_batch','_wpnonce']));
+        wp_safe_redirect(remove_query_arg(['delete_batch', '_wpnonce']));
         exit;
     }
 }
 
+if (isset($_GET['stop_batch']) && !empty($_GET['stop_batch'])) {
+    $batch_id = sanitize_text_field($_GET['stop_batch']);
+    if (wp_verify_nonce($_GET['_wpnonce'], 'stop_batch_' . $batch_id)) {
+        ww_clear_all_product_batches($batch_id);
+
+        wp_safe_redirect(remove_query_arg(['stop_batch', '_wpnonce']));
+        exit;
+    }
+}
+
+if (isset($_GET['restart_batch']) && !empty($_GET['restart_batch'])) {
+    $batch_id = sanitize_text_field($_GET['restart_batch']);
+    if (wp_verify_nonce($_GET['_wpnonce'], 'restart_batch_' . $batch_id)) {
+        ww_restart_product_batch($batch_id);
+
+        wp_safe_redirect(remove_query_arg(['restart_batch', '_wpnonce']));
+        exit;
+    }
+}
+
+function ww_restart_product_batch($batch_id)
+{
+    global $wpdb;
+
+    $row = $wpdb->get_row(
+        $wpdb->prepare(
+            "SELECT status 
+            FROM {$wpdb->prefix}tvc_import_logs 
+            WHERE batch_id = %d 
+            ORDER BY id DESC 
+            LIMIT 1",
+            $batch_id
+        )
+    );
+
+    if ($row) {
+        $status = json_decode($row->status, true);
+
+        if (isset($status['filters'])) {
+            $filters = $status['filters'];
+        }
+    }
+
+    as_schedule_single_action(
+        time(),
+        'ww_import_product_batch',
+        [$batch_id, $filters]
+    );
+
+    tvc_sync_log("Restart product import jobs.", 'product');
+}
+
+function ww_clear_all_product_batches($batch_id)
+{
+    global $wpdb;
+
+    $wpdb->query(
+        $wpdb->prepare(
+            "DELETE FROM {$wpdb->prefix}actionscheduler_actions 
+            WHERE args LIKE %s",
+            '%' . $wpdb->esc_like($batch_id) . '%'
+        )
+    );
+    // wp_clear_scheduled_hook('ww_import_product_batch');
+    tvc_sync_log("Cleared all scheduled product import jobs.", 'product');
+}
 
 
 if (!$current_batch) {
 ?>
+    <?php
+    global $wpdb;
 
-<?php
-global $wpdb;
+    $logs_table    = $wpdb->prefix . 'tvc_import_logs';
+    $batches_table = $wpdb->prefix . 'tvc_import_batches';
 
-$logs_table    = $wpdb->prefix . 'tvc_import_logs';
-$batches_table = $wpdb->prefix . 'tvc_import_batches';
+    // Pagination setup
+    $per_page  = 10;
+    $current_page = isset($_GET['paged']) ? max(1, intval($_GET['paged'])) : 1;
+    $offset = ($current_page - 1) * $per_page;
 
-// Pagination setup
-$per_page  = 10;
-$current_page = isset($_GET['paged']) ? max(1, intval($_GET['paged'])) : 1;
-$offset = ($current_page - 1) * $per_page;
+    // Get total number of batches
+    $total_batches = $wpdb->get_var("SELECT COUNT(*) FROM $batches_table");
 
-// Get total number of batches
-$total_batches = $wpdb->get_var("SELECT COUNT(*) FROM $batches_table");
+    // Fetch batches for current page
+    $batches = $wpdb->get_results($wpdb->prepare(
+        "SELECT * FROM $batches_table ORDER BY created_at DESC LIMIT %d OFFSET %d",
+        $per_page,
+        $offset
+    ));
 
-// Fetch batches for current page
-$batches = $wpdb->get_results($wpdb->prepare(
-    "SELECT * FROM $batches_table ORDER BY created_at DESC LIMIT %d OFFSET %d",
-    $per_page,
-    $offset
-));
+    $total_pages = ceil($total_batches / $per_page);
+    ?>
 
-$total_pages = ceil($total_batches / $per_page);
-?>
+    <div class="wrap">
+        <h1 class="wp-heading-inline">📦 Import Logs Summary</h1>
+        <hr class="wp-header-end">
 
-<div class="wrap">
-    <h1 class="wp-heading-inline">📦 Import Logs Summary</h1>
-    <hr class="wp-header-end">
-
-    <table class="widefat fixed striped">
-        <thead>
-            <tr>
-                <th>Date</th>
-                <th>Batch ID</th>
-                <th>Total Success</th>
-                <th>Total Failed</th>
-                <th>View Logs</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-        <?php if(!empty($batches)) :
-            foreach($batches as $batch) :
-
-                // get all logs for this batch
-                $logs = $wpdb->get_results($wpdb->prepare(
-                    "SELECT status FROM $logs_table WHERE batch_id = %s",
-                    $batch->batch_id
-                ));
-
-                $total_success = 0;
-                $total_failed  = 0;
-
-                if(!empty($logs)) {
-                    foreach($logs as $log) {
-                        $status = json_decode($log->status, true);
-                        if(is_array($status)) {
-                            $total_success += isset($status['success']) ? intval($status['success']) : 0;
-                            $total_failed  += isset($status['failed']) ? intval($status['failed']) : 0;
-                        }
-                    }
-                }
-
-                ?>
+        <table class="widefat fixed striped">
+            <thead>
                 <tr>
-                    <td><?php echo esc_html(date('Y-m-d H:i', strtotime($batch->created_at))); ?></td>
-                    <td><?php echo esc_html($batch->batch_id); ?></td>
-                    <td><?php echo esc_html($total_success); ?></td>
-                    <td><?php echo esc_html($total_failed); ?></td>
-                    <td>
-                        <a href="<?php echo esc_url(admin_url('admin.php?page=tvc-logs&batch_id=' . $batch->batch_id)); ?>" class="button button-small">View Logs</a>
-                    </td>
-                    <td>
-                        <?php 
-                        $delete_url = wp_nonce_url(
-                            add_query_arg([
-                                'page' => 'tvc-logs',
-                                'delete_batch' => $batch->batch_id
-                            ]),
-                            'delete_batch_' . $batch->batch_id
-                        );
-                        ?>
-                        <a href="<?php echo esc_url($delete_url); ?>" 
-                        class="button button-small button-danger" 
-                        onclick="return confirm('Are you sure you want to delete this batch and all related logs?');">Delete</a>
-                    </td>
+                    <th>Date</th>
+                    <th>Batch ID</th>
+                    <th>Total Success</th>
+                    <th>Total Failed</th>
+                    <th>View Logs</th>
+                    <th>Actions</th>
                 </tr>
-            <?php endforeach; 
-        else : ?>
-            <tr><td colspan="5">No batches found.</td></tr>
-        <?php endif; ?>
-        </tbody>
-    </table>
+            </thead>
+            <tbody>
+                <?php if (!empty($batches)) :
+                    foreach ($batches as $batch) :
+                ?>
+                        <tr>
+                            <td><?php echo esc_html(date('Y-m-d H:i', strtotime($batch->created_at))); ?></td>
+                            <td><?php echo esc_html($batch->batch_id); ?></td>
+                            <td><?php echo esc_html($batch->total_success); ?></td>
+                            <td><?php echo esc_html($batch->total_failed); ?></td>
+                            <td>
+                                <a href="<?php echo esc_url(admin_url('admin.php?page=tvc-logs&batch_id=' . $batch->batch_id)); ?>" class="button button-small">
+                                    View Logs
+                                </a>
+                            </td>
+                            <td>
+                                <?php
+                                $delete_url = wp_nonce_url(
+                                    add_query_arg([
+                                        'page' => 'tvc-logs',
+                                        'delete_batch' => $batch->batch_id
+                                    ]),
+                                    'delete_batch_' . $batch->batch_id
+                                );
 
-    <!-- Pagination -->
-    <?php if ($total_pages > 1) : ?>
-        <div class="tablenav">
-            <div class="tablenav-pages">
-                <?php
-                $base_url = remove_query_arg('paged');
-                if ($current_page > 1) :
-                    $prev_page = add_query_arg('paged', $current_page - 1, $base_url); ?>
-                    <a class="prev-page button" href="<?php echo esc_url($prev_page); ?>">&laquo; Previous</a>
+                                $stop_url = wp_nonce_url(
+                                    add_query_arg([
+                                        'page' => 'tvc-logs',
+                                        'stop_batch' => $batch->batch_id
+                                    ]),
+                                    'stop_batch_' . $batch->batch_id
+                                );
+
+                                $restart_url = wp_nonce_url(
+                                    add_query_arg([
+                                        'page' => 'tvc-logs',
+                                        'restart_batch' => $batch->batch_id
+                                    ]),
+                                    'restart_batch_' . $batch->batch_id
+                                );
+                                ?>
+                                <a href="<?php echo esc_url($stop_url); ?>"
+                                    class="button button-small button-danger"
+                                    onclick="return confirm('Are you sure you want to Stop this batch');">Stop</a>
+
+                                <a href="<?php echo esc_url($restart_url); ?>"
+                                    class="button button-small button-danger"
+                                    onclick="return confirm('Are you sure you want to restart this batch');">Restart</a>
+
+                                <a href="<?php echo esc_url($delete_url); ?>"
+                                    class="button button-small button-danger"
+                                    onclick="return confirm('Are you sure you want to delete this batch and all related logs?');">Delete</a>
+                            </td>
+                        </tr>
+                    <?php endforeach;
+                else : ?>
+                    <tr>
+                        <td colspan="5">No batches found.</td>
+                    </tr>
                 <?php endif; ?>
+            </tbody>
+        </table>
 
-                <span class="paging-input">
-                    Page <?php echo $current_page; ?> of <?php echo $total_pages; ?>
-                </span>
+        <!-- Pagination -->
+        <?php if ($total_pages > 1) : ?>
+            <div class="tablenav">
+                <div class="tablenav-pages">
+                    <?php
+                    $base_url = remove_query_arg('paged');
+                    if ($current_page > 1) :
+                        $prev_page = add_query_arg('paged', $current_page - 1, $base_url); ?>
+                        <a class="prev-page button" href="<?php echo esc_url($prev_page); ?>">&laquo; Previous</a>
+                    <?php endif; ?>
 
-                <?php if ($current_page < $total_pages) :
-                    $next_page = add_query_arg('paged', $current_page + 1, $base_url); ?>
-                    <a class="next-page button" href="<?php echo esc_url($next_page); ?>">Next &raquo;</a>
-                <?php endif; ?>
+                    <span class="paging-input">
+                        Page <?php echo $current_page; ?> of <?php echo $total_pages; ?>
+                    </span>
+
+                    <?php if ($current_page < $total_pages) :
+                        $next_page = add_query_arg('paged', $current_page + 1, $base_url); ?>
+                        <a class="next-page button" href="<?php echo esc_url($next_page); ?>">Next &raquo;</a>
+                    <?php endif; ?>
+                </div>
             </div>
-        </div>
-    <?php endif; ?>
-</div>
+        <?php endif; ?>
+    </div>
 
 
 <?php
@@ -150,18 +222,30 @@ $total_pages = ceil($total_batches / $per_page);
 ?>
 
 <style>
-.tvc-status-badge {
-    display:inline-block;
-    padding:3px 8px;
-    margin:2px;
-    border-radius:3px;
-    font-size:12px;
-    color:#fff;
-}
-.tvc-status-success { background:#4CAF50; }
-.tvc-status-failed { background:#F44336; }
-.tvc-status-created { background:#2196F3; }
-.tvc-status-updated { background:#FF9800; }
+    .tvc-status-badge {
+        display: inline-block;
+        padding: 3px 8px;
+        margin: 2px;
+        border-radius: 3px;
+        font-size: 12px;
+        color: #fff;
+    }
+
+    .tvc-status-success {
+        background: #4CAF50;
+    }
+
+    .tvc-status-failed {
+        background: #F44336;
+    }
+
+    .tvc-status-created {
+        background: #2196F3;
+    }
+
+    .tvc-status-updated {
+        background: #FF9800;
+    }
 </style>
 
 <?php
@@ -172,7 +256,6 @@ $current_batch = isset($_GET['batch_id']) ? sanitize_text_field($_GET['batch_id'
 $logs_table = $wpdb->prefix . 'tvc_import_logs';
 
 if ($current_batch) {
-
     // Pagination setup for logs
     $per_page = 10;
     $current_page = isset($_GET['paged_logs']) ? max(1, intval($_GET['paged_logs'])) : 1;
@@ -234,7 +317,7 @@ if ($current_batch) {
 
                 foreach ($status as $key => $val) {
                     // skip arrays first
-                    if (in_array($key, ['invalid_records','filters','failed_records'], true)) {
+                    if (in_array($key, ['invalid_records', 'filters', 'failed_records'], true)) {
                         continue;
                     }
 
@@ -242,7 +325,7 @@ if ($current_batch) {
                     $value = is_scalar($val) ? $val : json_encode($val);
 
                     echo '<tr>';
-                    echo '<td style="border:1px solid #ccc;padding:4px;"><b>' . esc_html(ucfirst(str_replace('_',' ',$key))) . '</b></td>';
+                    echo '<td style="border:1px solid #ccc;padding:4px;"><b>' . esc_html(ucfirst(str_replace('_', ' ', $key))) . '</b></td>';
                     echo '<td style="border:1px solid #ccc;padding:4px;">' . esc_html($value) . '</td>';
                     echo '</tr>';
                 }
@@ -256,7 +339,6 @@ if ($current_batch) {
                 }
 
                 echo '</tbody></table>';
-
             } else {
                 echo esc_html($log->status);
             }
@@ -267,7 +349,7 @@ if ($current_batch) {
             if (!empty($status['filters']) && is_array($status['filters'])) {
                 foreach ($status['filters'] as $filterKey => $filterVal) {
                     $filterVal = $filterVal === null ? 'null' : $filterVal;
-                    echo '<li>' . esc_html(ucfirst(str_replace('_',' ',$filterKey))) . ': <code>' . esc_html($filterVal) . '</code></li>';
+                    echo '<li>' . esc_html(ucfirst(str_replace('_', ' ', $filterKey))) . ': <code>' . esc_html($filterVal) . '</code></li>';
                 }
                 echo '</ul></div>';
             }
@@ -325,7 +407,6 @@ if ($current_batch) {
 
             echo '</div></div>';
         }
-
     } else {
         echo '<p>No logs found for this batch.</p>';
     }

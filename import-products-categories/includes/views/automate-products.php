@@ -84,14 +84,14 @@ function ww_start_product_import($category_code = '', $beginDate = null, $endDat
     ];
 
     // Kick off the first background job
-    as_enqueue_async_action(
+    as_schedule_single_action(
+        time(), // run now
         'ww_import_product_batch',
         [$batch_id, $params]
     );
 
     // ww_import_product_batch($batch_id, $params);
-
-    //    ww_import_product_batch($batch_id, $params);
+    // ww_import_product_batch($batch_id, $params);
     tvc_sync_log("Started new product batch $batch_id (category: $category_code)", 'product');
 }
 
@@ -104,11 +104,11 @@ function ww_start_product_import($category_code = '', $beginDate = null, $endDat
  * Optional: clear all scheduled product imports.
  * Use with WP-CLI: wp eval 'ww_clear_all_product_batches();' --allow-root
  */
-function ww_clear_all_product_batches()
-{
-    wp_clear_scheduled_hook('ww_import_product_batch');
-    tvc_sync_log("Cleared all scheduled product import jobs.", 'product');
-}
+// function ww_clear_all_product_batches()
+// {
+//     wp_clear_scheduled_hook('ww_import_product_batch');
+//     tvc_sync_log("Cleared all scheduled product import jobs.", 'product');
+// }
 
 
 //

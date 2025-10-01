@@ -59,7 +59,7 @@ function tvc_plugin_create_tables()
     $table5 = $wpdb->prefix . 'tvc_import_logs';
     $sql5 = "CREATE TABLE $table5 (
         id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
-        batch_id LONGTEXT NULL,
+        import_batch_id INT Null,
         status LONGTEXT NULL,
         success_skus LONGTEXT NULL,
         type VARCHAR(100) NULL,
@@ -73,7 +73,8 @@ function tvc_plugin_create_tables()
     $sql6 = "CREATE TABLE $table6 (
         id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
         batch_id LONGTEXT NULL,
-        date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        total_success INT NULL
+        total_failed INT NULL
         PRIMARY KEY (id)
     ) $charset_collate;";
 

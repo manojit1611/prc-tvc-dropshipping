@@ -69,16 +69,15 @@ define('TVC_IMAGE_BASE_URL', 'https://img.tvc-mall.com');
 //     error_log("[{$time}] {$message}\n", 3, $file);
 // }
 
-function tvc_sync_log($message, $type = 'general') {
+function tvc_sync_log($message, $type = 'general')
+{
     if (!function_exists('wc_get_logger')) {
-        // Fallback if WooCommerce not active
         error_log("[TVC Sync] " . $message);
         return;
     }
 
     $logger = wc_get_logger();
-    $context = array('source' => 'tvc-sync-' . $type); 
-    // 'source' defines the log file name in WooCommerce logs
+    $context = array('source' => 'tvc-sync-' . $type);
 
     $logger->info($message, $context);
 }
@@ -322,7 +321,6 @@ function render_error_logs()
                 echo '<p>No logs found for this date.</p>';
             }
         }
-
     } else {
         echo '<p>No log files found.</p>';
     }
@@ -390,7 +388,7 @@ add_action('plugins_loaded', function () {
 
 
 // Logging import batches and errors
-function start_import_batch($batch_id)
+function start_import_batch($batch_id, $state)
 {
     global $wpdb;
     $batches_table = $wpdb->prefix . 'tvc_import_batches';
@@ -398,7 +396,7 @@ function start_import_batch($batch_id)
     // Sanitize batch_id first
     $batch_id = sanitize_text_field($batch_id);
 
-    // Check if batch_id already exists
+    // Check if batch exists
     $exists = $wpdb->get_var(
         $wpdb->prepare(
             "SELECT COUNT(*) FROM $batches_table WHERE batch_id = %s",
@@ -406,17 +404,47 @@ function start_import_batch($batch_id)
         )
     );
 
-    if ($exists > 0) {
-        // Batch already exists — ignore or maybe return something
-        return false; // or return 'exists'
+    $state_data = json_decode($state, true);
+    if ($exists && $state_data && isset($state_data['success'], $state_data['failed'])) {
+        // Fetch current totals
+        $current = $wpdb->get_row(
+            $wpdb->prepare(
+                "SELECT id, total_success, total_failed 
+                FROM $batches_table 
+                WHERE batch_id = %s",
+                $batch_id
+            ),
+            ARRAY_A
+        );
+
+        $new_success = (int)$current['total_success'] + (int)$state_data['success'];
+        $new_failed  = (int)$current['total_failed'] + (int)$state_data['failed'];
+
+        // Update with new values
+        $wpdb->query(
+            $wpdb->prepare(
+                "UPDATE $batches_table
+                SET total_success = %d,
+                    total_failed  = %d
+                WHERE batch_id = %s",
+                $new_success,
+                $new_failed,
+                $batch_id
+            )
+        );
     }
 
-    // Insert new batch_id
+    if ($exists > 0) {
+        return $current; // or return 'exists'
+    }
+
     $wpdb->insert(
         $batches_table,
         [
             'batch_id' => $batch_id,
-            'created_at' => current_time('mysql') // optional: timestamp
+            'created_at' => current_time('mysql'),
+            'total_success' => 0,
+            'total_failed' => 0,
         ],
         [
             '%s',
@@ -424,21 +452,22 @@ function start_import_batch($batch_id)
         ]
     );
 
-    return true; // inserted
+    return $wpdb->insert_id; // inserted
 }
 
-function add_import_error_log($batch_id, $state, $sku, $type)
+function add_import_error_log($batch_id, $state, $success_skus, $type)
 {
     global $wpdb;
     $logs_table = $wpdb->prefix . 'tvc_import_logs';
-    start_import_batch($batch_id);
+    $log = start_import_batch($batch_id, $state);
+
 
     $wpdb->insert(
         $logs_table,
         [
-            'batch_id' => $batch_id,
+            'import_batch_id' => $log['id'],
             'status' => maybe_serialize($state),
-            'success_skus' => maybe_serialize($sku),
+            'success_skus' => maybe_serialize($success_skus),
             'failed_sku' => maybe_serialize($state['failed_records'] ?? []),
             'type' => $type,
         ],
@@ -468,5 +497,3 @@ function enqueue_select2_assets()
 }
 
 add_action('admin_enqueue_scripts', 'enqueue_select2_assets');
-
-

@@ -114,7 +114,6 @@ class MPI_Importer
         return $manufacturer->parent_id ?? false;
     }
 
-
     // ======== Generate correct links for product_model term ========
     public function custom_model_term_link($url, $term, $taxonomy)
     {
@@ -252,8 +251,6 @@ class MPI_Importer
 
         $productState = json_encode($this->syncProductState);
         update_post_meta($product_id, 'tvc_sync_log', $productState);
-
-        // my_log_error('Product Inserted ' . $count);
 
         return true;
     }
