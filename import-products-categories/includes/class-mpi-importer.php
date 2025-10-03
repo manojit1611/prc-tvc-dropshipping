@@ -171,7 +171,7 @@ class MPI_Importer
      * @return true
      * Update Product Details
      */
-    function ww_update_detail_of_products($products, $batch_id = null, $filters = [])
+    function ww_update_detail_of_products($products, $batch_name = null, $filters = [])
     {
         $success_count = 0;
         $failure_count = 0;
@@ -198,7 +198,7 @@ class MPI_Importer
 
                 $tvc_product_data = $response;
 
-                if (empty($tvc_product_data)) {
+                if (isset($tvc_product_data['Code']) && $tvc_product_data['Code'] == 404) {
                     $invalid_records[] = ['Empty Product' => $sku];
                     tvc_sync_log($sku . ' product skipped due to empty details from TVC SKU API', 'tvc-product-api');
                     continue;
@@ -223,6 +223,9 @@ class MPI_Importer
                 // $this->update_additional_info($product_id, $tvc_product_data, $product, $model_list, $sku);
                 $this->update_additional_info($tvc_product_data, $product, $model_list, $sku);
 
+                $productState = json_encode($this->syncProductState);
+                update_post_meta($product_id, 'tvc_sync_log', $productState);
+
                 $successfully_processed[] = $sku;
                 $success_count++;
                 $stage = 'Completed';
@@ -245,9 +248,8 @@ class MPI_Importer
             'filters' => $filters,
         ];
 
-        add_import_error_log($batch_id, json_encode($state), json_encode($successfully_processed), 'product');
-        $productState = json_encode($this->syncProductState);
-        update_post_meta($product_id, 'tvc_sync_log', $productState);
+        add_import_error_log($batch_name, $filters['import_batch_id'], json_encode($state), json_encode($successfully_processed), 'product');
+
         return true;
     }
 
@@ -322,7 +324,7 @@ class MPI_Importer
         };
 
         // If empty product
-        if ($product_data['Code'] == 404) {
+        if (isset($product_data['Code']) && $product_data['Code'] == 404) {
             $handle_error('Empty Product: ' . $sku);
         }
 
@@ -479,7 +481,7 @@ class MPI_Importer
         $weight = $product_data['Properties']['Weight'] ?? '';
         $moq = $product_data['MinimumOrderQuantity'] ?? '';
         $status = "publish";
-//        $status = ($product_data['ProductStatus'] == 1) ? 'publish' : 'draft';
+        //        $status = ($product_data['ProductStatus'] == 1) ? 'publish' : 'draft';
 
         // TVC stock normal and out of stock
         $allowForPublishStatus = array(1);
@@ -613,7 +615,7 @@ class MPI_Importer
         );
 
         if ($result === false) {
-            my_log_error("❌ Insert failed for post_id {$postId} in tvc_products | DB error: " . $wpdb->last_error);
+            // my_log_error("❌ Insert failed for post_id {$postId} in tvc_products | DB error: " . $wpdb->last_error);
 
             $this->syncProductState['tvc_products_data'] = [
                 'succ' => 0,

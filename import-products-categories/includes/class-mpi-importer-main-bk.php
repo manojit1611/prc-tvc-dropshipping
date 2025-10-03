@@ -207,7 +207,7 @@ class MPI_Importer
                 if (empty($tvc_product_data)) {
                     $invalid_records[] = ['Empty Product' => $sku];
                     // add_import_error_log($batch_id, $tvc_product_data, 'Empty Product', 'product');
-                    // my_log_error('Empty Product' . $tvc_product_data);
+                    // // my_log_error('Empty Product' . $tvc_product_data);
                     continue;
                 }
 
@@ -215,7 +215,7 @@ class MPI_Importer
                     $checkCategory = category_exists_by_code($tvc_product_data['CategoryCode']);
                     if (!$checkCategory) {
                         $invalid_records[] = ['Category Code does not exist ' . $tvc_product_data['CategoryCode'] => $sku];
-                        // my_log_error('Category Code does not exist' . $tvc_product_data['CategoryCode']);
+                        // // my_log_error('Category Code does not exist' . $tvc_product_data['CategoryCode']);
                         continue;
                     }
                 }
@@ -256,7 +256,7 @@ class MPI_Importer
         $productState = json_encode($this->syncProductState);
         update_post_meta($product_id, 'tvc_sync_log', $productState);
 
-        // my_log_error('Product Inserted ' . $count);
+        // // my_log_error('Product Inserted ' . $count);
 
         return true;
     }
@@ -332,7 +332,7 @@ class MPI_Importer
 
         // 🔹 Helper: handle error response/redirect
         $handle_error = function ($msg) use ($redirect, $args) {
-            my_log_error($msg);
+            // my_log_error($msg);
 
             if ($redirect) {
                 $args['msg'] = $msg;
@@ -366,7 +366,7 @@ class MPI_Importer
             $this->update_additional_info($product_id, $product_data, $product, $model_list, $sku);
 
             $msg = 'Product updated successfully';
-            my_log_error('Product updated: ' . $sku);
+            // my_log_error('Product updated: ' . $sku);
 
             if ($redirect) {
                 $args['msg'] = $msg;
@@ -641,7 +641,7 @@ class MPI_Importer
         );
 
         if ($result === false) {
-            my_log_error("❌ Insert failed for post_id {$postId} in tvc_products | DB error: " . $wpdb->last_error);
+            // my_log_error("❌ Insert failed for post_id {$postId} in tvc_products | DB error: " . $wpdb->last_error);
 
             $this->syncProductState['tvc_products_data'] = [
                 'succ' => 0,
@@ -818,7 +818,7 @@ class MPI_Importer
         $table_name = $wpdb->prefix . ww_tvc_get_manufacturer_product_relation_table_name();
         $new_term = [];
         if (empty($data['CompatibleList'])) {
-            my_log_error('Empty CompatibleList ' . $product_id);
+            // my_log_error('Empty CompatibleList ' . $product_id);
             return;
         }
 
@@ -894,7 +894,7 @@ class MPI_Importer
     public function add_update_models($data, $product_id)
     {
         if (empty($data['CompatibleList'])) {
-            my_log_error('Empty CompatibleList ' . $product_id);
+            // my_log_error('Empty CompatibleList ' . $product_id);
             return;
         }
 

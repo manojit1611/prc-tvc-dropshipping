@@ -10,27 +10,45 @@ add_action('rest_api_init', function () {
 
 function mpi_fetch_by_date_time_callback(WP_REST_Request $request)
 {
+    global $wpdb;
     $current_time = current_time('timestamp');
 
-    // Date window (last 15 minutes)
     $beginDate = date('Y-m-d\TH:i:s', $current_time - (15 * 60));
     $endDate   = date('Y-m-d\TH:i:s', $current_time);
 
-    $batch_id = wp_generate_uuid4() . "_latest_products";
+    $batch_name = "latest_products";
+    $import_batch_id = start_import_batch($batch_name, NULL);
+
     $params = [
         'category_code' => null,
         'page_index' => 1,
         'last_product_id' => null,
         'beginDate' => $beginDate,
-        'endDate' => $endDate
+        'endDate' => $endDate,
+        'import_batch_id' => $import_batch_id
     ];
 
-    // Kick off the first background job
-    as_schedule_single_action(
-        time(),
-        'ww_import_product_batch',
-        [$batch_id, $params]
-    );
+    $status = $wpdb->get_var($wpdb->prepare(
+        "SELECT status FROM {$wpdb->prefix}actionscheduler_actions 
+        WHERE hook = 'ww_import_product_batch'
+        AND status = 'pending' 
+        AND args LIKE %s 
+        ORDER BY scheduled_date_gmt DESC LIMIT 1",
+        '%' . $wpdb->esc_like($batch_name) . '%'
+    ));
+
+    if (!$status) {
+        // Kick off the first background job
+        as_schedule_single_action(
+            time(),
+            'ww_import_product_batch',
+            [$batch_name, $params]
+        );
+    } else {
+        $data['filters'] = $params;
+        add_import_error_log($batch_name, $import_batch_id, json_encode($data), '', 'product');
+        // start_import_batch($batch_id, $params);
+    }
 
     return rest_ensure_response([
         'status' => 'success',

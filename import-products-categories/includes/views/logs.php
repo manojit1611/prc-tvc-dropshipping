@@ -5,15 +5,15 @@ $logs_table = $wpdb->prefix . 'tvc_import_logs';
 
 $batches = $wpdb->get_results("SELECT batch_id, created_at FROM $batches_table ORDER BY created_at DESC");
 
-$current_batch = isset($_GET['batch_id']) ? sanitize_text_field($_GET['batch_id']) : '';
+$current_batch = isset($_GET['import_id']) ? sanitize_text_field($_GET['import_id']) : '';
 
 if (isset($_GET['delete_batch']) && !empty($_GET['delete_batch'])) {
-    $batch_id = sanitize_text_field($_GET['delete_batch']);
-    if (wp_verify_nonce($_GET['_wpnonce'], 'delete_batch_' . $batch_id)) {
+    $id = sanitize_text_field($_GET['delete_batch']);
+    if (wp_verify_nonce($_GET['_wpnonce'], 'delete_batch_' . $id)) {
         // delete logs first
-        $wpdb->delete($logs_table, ['batch_id' => $batch_id]);
+        $wpdb->delete($logs_table, ['id' => $id]);
         // delete batch
-        $wpdb->delete($batches_table, ['batch_id' => $batch_id]);
+        $wpdb->delete($batches_table, ['id' => $id]);
         // redirect to avoid resubmission
         wp_safe_redirect(remove_query_arg(['delete_batch', '_wpnonce']));
         exit;
@@ -48,7 +48,7 @@ function ww_restart_product_batch($batch_id)
         $wpdb->prepare(
             "SELECT status 
             FROM {$wpdb->prefix}tvc_import_logs 
-            WHERE batch_id = %d 
+            WHERE import_batch_id = %d 
             ORDER BY id DESC 
             LIMIT 1",
             $batch_id
@@ -62,6 +62,11 @@ function ww_restart_product_batch($batch_id)
             $filters = $status['filters'];
         }
     }
+
+    start_import_batch($batch_id);
+
+    $filters['batch_id'] = $batch_id;
+    $batch_id = 'latest_products';
 
     as_schedule_single_action(
         time(),
@@ -83,6 +88,9 @@ function ww_clear_all_product_batches($batch_id)
             '%' . $wpdb->esc_like($batch_id) . '%'
         )
     );
+
+    start_import_batch($batch_id, 'Stopped');
+
     // wp_clear_scheduled_hook('ww_import_product_batch');
     tvc_sync_log("Cleared all scheduled product import jobs.", 'product');
 }
@@ -125,6 +133,7 @@ if (!$current_batch) {
                     <th>Batch ID</th>
                     <th>Total Success</th>
                     <th>Total Failed</th>
+                    <th>Status</th>
                     <th>View Logs</th>
                     <th>Actions</th>
                 </tr>
@@ -138,8 +147,9 @@ if (!$current_batch) {
                             <td><?php echo esc_html($batch->batch_id); ?></td>
                             <td><?php echo esc_html($batch->total_success); ?></td>
                             <td><?php echo esc_html($batch->total_failed); ?></td>
+                            <td><?php echo esc_html($batch->status); ?></td>
                             <td>
-                                <a href="<?php echo esc_url(admin_url('admin.php?page=tvc-logs&batch_id=' . $batch->batch_id)); ?>" class="button button-small">
+                                <a href="<?php echo esc_url(admin_url('admin.php?page=tvc-logs&import_id=' . $batch->id)); ?>" class="button button-small">
                                     View Logs
                                 </a>
                             </td>
@@ -148,25 +158,25 @@ if (!$current_batch) {
                                 $delete_url = wp_nonce_url(
                                     add_query_arg([
                                         'page' => 'tvc-logs',
-                                        'delete_batch' => $batch->batch_id
+                                        'delete_batch' => $batch->id
                                     ]),
-                                    'delete_batch_' . $batch->batch_id
+                                    'delete_batch_' . $batch->id
                                 );
 
                                 $stop_url = wp_nonce_url(
                                     add_query_arg([
                                         'page' => 'tvc-logs',
-                                        'stop_batch' => $batch->batch_id
+                                        'stop_batch' => $batch->id
                                     ]),
-                                    'stop_batch_' . $batch->batch_id
+                                    'stop_batch_' . $batch->id
                                 );
 
                                 $restart_url = wp_nonce_url(
                                     add_query_arg([
                                         'page' => 'tvc-logs',
-                                        'restart_batch' => $batch->batch_id
+                                        'restart_batch' => $batch->id
                                     ]),
-                                    'restart_batch_' . $batch->batch_id
+                                    'restart_batch_' . $batch->id
                                 );
                                 ?>
                                 <a href="<?php echo esc_url($stop_url); ?>"
@@ -175,7 +185,7 @@ if (!$current_batch) {
 
                                 <a href="<?php echo esc_url($restart_url); ?>"
                                     class="button button-small button-danger"
-                                    onclick="return confirm('Are you sure you want to restart this batch');">Restart</a>
+                                    onclick="return confirm('Are you sure you want to restart this batch');">Start/Restart</a>
 
                                 <a href="<?php echo esc_url($delete_url); ?>"
                                     class="button button-small button-danger"
@@ -214,8 +224,6 @@ if (!$current_batch) {
             </div>
         <?php endif; ?>
     </div>
-
-
 <?php
 }
 
@@ -252,7 +260,7 @@ if (!$current_batch) {
 
 global $wpdb;
 
-$current_batch = isset($_GET['batch_id']) ? sanitize_text_field($_GET['batch_id']) : '';
+$current_batch = isset($_GET['import_id']) ? sanitize_text_field($_GET['import_id']) : '';
 $logs_table = $wpdb->prefix . 'tvc_import_logs';
 
 if ($current_batch) {
@@ -263,13 +271,13 @@ if ($current_batch) {
 
     // Total logs count
     $total_logs = $wpdb->get_var($wpdb->prepare(
-        "SELECT COUNT(*) FROM $logs_table WHERE batch_id = %s",
+        "SELECT COUNT(*) FROM $logs_table WHERE import_batch_id = %s",
         $current_batch
     ));
 
     // Fetch logs with limit & offset
     $logs = $wpdb->get_results($wpdb->prepare(
-        "SELECT * FROM $logs_table WHERE batch_id = %s ORDER BY id DESC LIMIT %d OFFSET %d",
+        "SELECT * FROM $logs_table WHERE import_batch_id = %s ORDER BY id DESC LIMIT %d OFFSET %d",
         $current_batch,
         $per_page,
         $offset

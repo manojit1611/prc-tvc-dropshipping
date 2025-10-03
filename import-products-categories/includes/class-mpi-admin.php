@@ -22,6 +22,15 @@ class MPI_Admin
             26 // Position
         );
 
+        add_submenu_page(
+            'tvc-main', // Parent slug
+            __('Pull Categories', 'import-products-categories'), // Page title
+            __('Pull Categories', 'import-products-categories'), // Menu title
+            'manage_options',
+            'category_page', // Slug
+            [$this, 'render_category_page'] // Callback
+        );
+
         // Submenu: Product Importer
         add_submenu_page(
             'tvc-main', // Parent slug
@@ -30,15 +39,6 @@ class MPI_Admin
             'manage_options',
             'product_page', // Slug
             [$this, 'render_product_page'] // Callback
-        );
-
-        add_submenu_page(
-            'tvc-main', // Parent slug
-            __('Pull Categories', 'import-products-categories'), // Page title
-            __('Pull Categories', 'import-products-categories'), // Menu title
-            'manage_options',
-            'category_page', // Slug
-            [$this, 'render_category_page'] // Callback
         );
 
         // Submenu: Product Fetch By SKU
@@ -120,7 +120,6 @@ class MPI_Admin
      */
     public function get_product_cat_select_based_on_tvc_api($slug = null)
     {
-
         $tvc_cat = array();
         if (str_starts_with($slug, '{')) {
             $tvc_cat = json_decode(wp_unslash($slug), true);

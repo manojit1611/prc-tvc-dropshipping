@@ -334,7 +334,8 @@ function render_error_logs()
 add_filter('manage_edit-product_columns', 'ww_custom_product_list_column');
 function ww_custom_product_list_column($columns)
 {
-    $columns['update_button'] = 'Action'; // Column header
+    $columns['update_button'] = 'Action';
+    $columns['product_log'] = 'Product Log';
     return $columns;
 }
 
@@ -357,6 +358,73 @@ add_action('admin_notices', function () {
     }
 });
 
+// 2. Add content inside column (button + hidden popup)
+add_action('manage_product_posts_custom_column', function ($column, $post_id) {
+    if ($column === 'product_log') {
+        $raw_value = get_post_meta($post_id, 'tvc_sync_log', true);
+        if ($raw_value) {
+            $data = json_decode($raw_value, true);
+
+            if (json_last_error() === JSON_ERROR_NONE && is_array($data)) {
+                // Unique ID for popup
+                $popup_id = 'popup_' . $post_id;
+
+                echo '<button class="button show-log-popup" data-target="#' . esc_attr($popup_id) . '">View Log</button>';
+
+                echo '<div id="' . esc_attr($popup_id) . '" class="log-popup" style="display:none;">';
+                echo '<div style="display:flex;align-items: center;justify-content: space-between;"><h3>Sync Log Details</h3><button class="button close-log-popup">Close</button></div>';
+                echo '<ul style="margin-left:16px;">';
+                if (isset($data['base_details']['succ'])) echo '<li>Basic Details: Inserted</li>';
+                if (isset($data['attributes']['succ'])) echo '<li>Attributes: Inserted</li>';
+                if (isset($data['also_available']['succ'])) echo '<li>Also Available: Inserted</li>';
+                if (isset($data['manufacturer']['succ'])) echo '<li>Manufacturer: Inserted</li>';
+                if (isset($data['model']['succ'])) echo '<li>Model: Inserted</li>';
+                echo '</ul>';
+                echo '</div>';
+            } else {
+                echo '<span style="color:red;">Invalid JSON</span>';
+            }
+        } else {
+            echo '<span style="color:#aaa;">—</span>';
+        }
+    }
+}, 10, 2);
+
+// 3. Add JavaScript to handle popup toggle
+add_action('admin_footer', function () {
+?>
+    <script>
+        jQuery(document).ready(function($) {
+            $('.show-log-popup').on('click', function(e) {
+                e.preventDefault();
+                var target = $(this).data('target');
+                $(target).fadeIn();
+            });
+
+            $(document).on('click', '.close-log-popup', function(e) {
+                e.preventDefault();
+                $(this).closest('.log-popup').fadeOut();
+            });
+        });
+    </script>
+
+    <style>
+        .log-popup {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: #fff;
+            padding: 20px;
+            border: 2px solid #0073aa;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            z-index: 9999;
+            min-width: 300px;
+        }
+    </style>
+<?php
+});
 
 // === Includes ===
 require_once TVC_MPI_PLUGIN_PATH . 'includes/table/create_table.php';
@@ -390,7 +458,7 @@ add_action('plugins_loaded', function () {
 
 
 // Logging import batches and errors
-function start_import_batch($batch_id, $state)
+function start_import_batch($batch_name, $batch_id = Null, $status = 'Running', $state = "")
 {
     global $wpdb;
     $batches_table = $wpdb->prefix . 'tvc_import_batches';
@@ -401,7 +469,7 @@ function start_import_batch($batch_id, $state)
     // Check if batch exists
     $exists = $wpdb->get_var(
         $wpdb->prepare(
-            "SELECT COUNT(*) FROM $batches_table WHERE batch_id = %s",
+            "SELECT COUNT(*) FROM $batches_table WHERE id = %s",
             $batch_id
         )
     );
@@ -413,7 +481,7 @@ function start_import_batch($batch_id, $state)
             $wpdb->prepare(
                 "SELECT id, total_success, total_failed 
                 FROM $batches_table 
-                WHERE batch_id = %s",
+                WHERE id = %s",
                 $batch_id
             ),
             ARRAY_A
@@ -427,47 +495,61 @@ function start_import_batch($batch_id, $state)
             $wpdb->prepare(
                 "UPDATE $batches_table
                 SET total_success = %d,
-                    total_failed  = %d
-                WHERE batch_id = %s",
+                    total_failed  = %d,
+                    status = %s
+                WHERE id = %s",
                 $new_success,
                 $new_failed,
+                $status,
                 $batch_id
             )
         );
+
+        if ($exists > 0) {
+            return $current->id; // or return 'exists'
+        }
+    } else if ($exists) {
+        $wpdb->query(
+            $wpdb->prepare(
+                "UPDATE $batches_table
+                SET status = %s
+                WHERE id = %s",
+                $status,
+                $batch_id
+            )
+        );
+
+        return true;
+    } else if (!$exists) {
+        $wpdb->insert(
+            $batches_table,
+            [
+                'batch_id' => $batch_name,
+                'created_at' => current_time('mysql'),
+                'total_success' => 0,
+                'total_failed' => 0,
+                'status' => 'In Queue'
+            ],
+            [
+                '%s',
+                '%s'
+            ]
+        );
+
+        return $wpdb->insert_id; // inserted
     }
-
-    if ($exists > 0) {
-        return $current; // or return 'exists'
-    }
-
-    $wpdb->insert(
-        $batches_table,
-        [
-            'batch_id' => $batch_id,
-            'created_at' => current_time('mysql'),
-            'total_success' => 0,
-            'total_failed' => 0,
-        ],
-        [
-            '%s',
-            '%s'
-        ]
-    );
-
-    return $wpdb->insert_id; // inserted
 }
 
-function add_import_error_log($batch_id, $state, $success_skus, $type)
+function add_import_error_log($batch_name, $batch_id, $state, $success_skus, $type)
 {
     global $wpdb;
     $logs_table = $wpdb->prefix . 'tvc_import_logs';
-    $log = start_import_batch($batch_id, $state);
-
+    $logId = start_import_batch($batch_name, $batch_id, 'Running', $state);
 
     $wpdb->insert(
         $logs_table,
         [
-            'import_batch_id' => $log['id'],
+            'import_batch_id' => $logId,
             'status' => maybe_serialize($state),
             'success_skus' => maybe_serialize($success_skus),
             'failed_sku' => maybe_serialize($state['failed_records'] ?? []),
