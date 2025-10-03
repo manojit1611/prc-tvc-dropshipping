@@ -8,49 +8,33 @@ add_action('rest_api_init', function () {
     ]);
 });
 
-function mpi_fetch_by_date_time_callback(WP_REST_Request $request) {
-    // Optional: accept params (perPage, batch_id, etc.)
-    $perPage = $request->get_param('per_page') ?: 10;
-    $maxPages = $request->get_param('max_pages') ?: 1;
-
-    // Your existing importer + API
-    $importer = new MPI_Importer();
-    $api = new MPI_API();
-
-    $lastProductId = null;
-    $pageIndex = 1;
-
-    // Current date/time in WP timezone
+function mpi_fetch_by_date_time_callback(WP_REST_Request $request)
+{
     $current_time = current_time('timestamp');
 
     // Date window (last 15 minutes)
     $beginDate = date('Y-m-d\TH:i:s', $current_time - (15 * 60));
     $endDate   = date('Y-m-d\TH:i:s', $current_time);
 
-    $allProducts = [];
+    $batch_id = wp_generate_uuid4() . "_latest_products";
+    $params = [
+        'category_code' => null,
+        'page_index' => 1,
+        'last_product_id' => null,
+        'beginDate' => $beginDate,
+        'endDate' => $endDate
+    ];
 
-    do {
-        $products = $api->get_products_by_category_code(
-            null,
-            $lastProductId,
-            $perPage,
-            $pageIndex,
-            $beginDate,
-            $endDate
-        );
-
-        $importer->ww_update_detail_of_products($products);
-
-        $allProducts[] = $products; // store for response
-
-        $lastProductId = $products['lastProductId'] ?? null;
-        $pageIndex++;
-    } while ($pageIndex <= $maxPages);
+    // Kick off the first background job
+    as_schedule_single_action(
+        time(),
+        'ww_import_product_batch',
+        [$batch_id, $params]
+    );
 
     return rest_ensure_response([
         'status' => 'success',
         'beginDate' => $beginDate,
         'endDate' => $endDate,
-        'data' => $allProducts,
     ]);
 }

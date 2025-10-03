@@ -70,13 +70,14 @@ function tvc_plugin_create_tables()
 
     // Table 6: Import Batches
     $table6 = $wpdb->prefix . 'tvc_import_batches';
-    $sql6 = "CREATE TABLE $table6 (
-        id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
-        batch_id LONGTEXT NULL,
-        total_success INT NULL
-        total_failed INT NULL
-        PRIMARY KEY (id)
-    ) $charset_collate;";
+    $sql6 = "CREATE TABLE wp_tvc_import_batches (
+  id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+  batch_id LONGTEXT NULL,
+  total_success INT NULL,
+  total_failed INT NULL,
+  PRIMARY KEY (id)
+);
+";
 
     // Run dbDelta on each table SQL
     dbDelta($sql1);

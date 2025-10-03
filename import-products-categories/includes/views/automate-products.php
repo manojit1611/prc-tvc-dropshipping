@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Plugin Name: WW Product Batch Import
  * Description: Fetches all products from the external API in background batches with unique locks—no WP-Cron setup required.
@@ -7,6 +8,48 @@
  */
 
 if (!defined('ABSPATH')) exit;
+
+function ww_delete_all_product_batched_which_are_completed()
+{
+
+// Run this once (via functions.php, custom plugin, or wp eval-file)
+
+    global $wpdb;
+
+// 1. Get IDs of all completed/failed actions for the hook
+    $action_ids = $wpdb->get_col($wpdb->prepare("
+    SELECT action_id 
+    FROM {$wpdb->prefix}actionscheduler_actions
+    WHERE hook = %s
+    AND status IN ('complete')
+", 'ww_import_product_batch'));
+
+    if (!empty($action_ids)) {
+        $ids_placeholder = implode(',', array_fill(0, count($action_ids), '%d'));
+
+        // 2. Delete related logs
+        $wpdb->query($wpdb->prepare("
+        DELETE FROM {$wpdb->prefix}actionscheduler_logs
+        WHERE action_id IN ($ids_placeholder)
+    ", ...$action_ids));
+
+        // 3. Delete related claims
+        $wpdb->query($wpdb->prepare("
+        DELETE FROM {$wpdb->prefix}actionscheduler_claims
+        WHERE action_id IN ($ids_placeholder)
+    ", ...$action_ids));
+
+        // 4. Delete the actions themselves
+        $wpdb->query($wpdb->prepare("
+        DELETE FROM {$wpdb->prefix}actionscheduler_actions
+        WHERE action_id IN ($ids_placeholder)
+    ", ...$action_ids));
+    }
+
+}
+
+//add_action("admin_init", "ww_delete_all_product_batched_which_are_completed", 10, 1);
+
 
 /**
  * Import one batch of products.
@@ -19,19 +62,25 @@ if (!defined('ABSPATH')) exit;
 // ---------- BACKGROUND WORKER ----------
 function ww_import_product_batch($batch_id, $filters = [])
 {
-    tvc_sync_log("SCHEDULED WORKER STARTED: Batch $batch_id And filter was " . print_r($filters, true));
+    tvc_sync_log("Product Pull Started:: $batch_id And filter was " . json_encode($filters), 'product');
 
-    $lock_key = 'ww_product_sync_' . sanitize_key($batch_id);
+    // Prepare Batch transient
+    $lock_key = sanitize_key($batch_id);
     if (get_transient($lock_key)) {
-        return; // another batch already running
+        // another batch already running
+        return;
     }
-    set_transient($lock_key, 1, 120); // lock for 2 min
 
-    $per_page = 5; // adjust as needed
+    // lock for 2 min
+    set_transient($lock_key, 1, 120);
+
+    $per_page = 20; // adjust as needed
     $importer = new MPI_Importer();
     $api = new MPI_API();
 
     try {
+
+        // Pull products from TVC API
         $products = $api->get_products_by_category_code(
             $filters['category_code'] ?? '',
             $filters['last_product_id'] ?? null,
@@ -39,12 +88,17 @@ function ww_import_product_batch($batch_id, $filters = [])
             $filters['page_index'] ?? 1
         );
 
+        // Check if products are coming or not to process
         if (empty($products['ProductItemNoList'])) {
-            tvc_sync_log("No more products to import. Batch $batch_id completed.", 'product');
+            tvc_sync_log("No products found to import. Batch $batch_id completed.", 'product');
             delete_transient($lock_key);
             return;
         }
 
+        // Send Product for a process
+        tvc_sync_log("Product Send to Process:: $batch_id And products was " . json_encode($products), ww_tvc_product_data_log_type());
+
+        // Process for update into a system
         $importer->ww_update_detail_of_products($products, $batch_id, $filters);
 
         if (!empty($products['lastProductId'])) {
@@ -57,9 +111,12 @@ function ww_import_product_batch($batch_id, $filters = [])
             if (function_exists('as_schedule_single_action')) {
                 as_schedule_single_action(time() + $delay_seconds, 'ww_import_product_batch', [$batch_id, $filters]);
             }
+
+            // delete it which are completed successfully
+            ww_delete_all_product_batched_which_are_completed();
         }
     } catch (Exception $e) {
-        error_log("Batch $batch_id exception: " . $e->getMessage());
+        tvc_sync_log("Batch $batch_id exception: " . $e->getMessage(), 'product');
     }
 
     delete_transient($lock_key);
@@ -74,7 +131,9 @@ add_action('ww_import_product_batch', 'ww_import_product_batch', 10, 2);
  */
 function ww_start_product_import($category_code = '', $beginDate = null, $endDate = null)
 {
-    $batch_id = wp_generate_uuid4(); // globally unique
+    $term = ww_tvc_get_term_data_by_tvc_code($category_code);
+    $name = $term->name ?? wp_generate_uuid4() . "_product_automation";
+    $batch_id = sanitize_title($name);
     $params = [
         'category_code' => $category_code,
         'page_index' => 1,
@@ -83,16 +142,14 @@ function ww_start_product_import($category_code = '', $beginDate = null, $endDat
         'endDate' => $endDate
     ];
 
+    tvc_sync_log("Batch Scheduled:: $batch_id: " . json_encode($params), 'product');
+
     // Kick off the first background job
     as_schedule_single_action(
         time(), // run now
         'ww_import_product_batch',
         [$batch_id, $params]
     );
-
-    // ww_import_product_batch($batch_id, $params);
-    // ww_import_product_batch($batch_id, $params);
-    tvc_sync_log("Started new product batch $batch_id (category: $category_code)", 'product');
 }
 
 // Start automatically on activation (all products)

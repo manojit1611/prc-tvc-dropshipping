@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Plugin Name: Import Products & Categories Old
  * Plugin URI: https://example.com/import-products-categories
@@ -13,8 +14,6 @@
 if (!defined('ABSPATH')) {
     exit;
 }
-
-
 
 
 //if (defined('WP_CLI') && WP_CLI) {
@@ -54,21 +53,14 @@ define('TVC_MPI_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('TVC_PLUGIN_NAME_PREFIX', 'Tvc');
 define('TVC_IMAGE_BASE_URL', 'https://img.tvc-mall.com');
 
-/**
- * Write messages to a dedicated log file: wp-content/tvc-sync.log
- * Writes to wp-content/tvc-sync.log by default,
- * or wp-content/tvc-sync-<type>.log if $type is provided.
- */
-// function tvc_sync_log($message, $type = "")
-// {
-//     $file = WP_CONTENT_DIR . '/tvc-sync.log';
-//     if ($type) {
-//         $file = WP_CONTENT_DIR . '/tvc-sync-' . $type . '.log';
-//     }
-//     $time = date('Y-m-d H:i:s');
-//     error_log("[{$time}] {$message}\n", 3, $file);
-// }
 
+/**
+ * @param $message
+ * @param $type
+ * @return void
+ * tvc_sync_log
+ * Manage Log Punch
+ */
 function tvc_sync_log($message, $type = 'general')
 {
     if (!function_exists('wc_get_logger')) {
@@ -83,16 +75,26 @@ function tvc_sync_log($message, $type = 'general')
 }
 
 
-// function tvc_sync_log($message, $type = "")
-// {
-//     $date = date('Y-m-d');
-//     $file = WP_CONTENT_DIR . '/logs/tvc-sync-' . $date . '.log';
-//     if ($type) {
-//         $file = WP_CONTENT_DIR . '/logs/tvc-sync-' . $type . '-' . $date . '.log';
-//     }
-//     $time = date('Y-m-d H:i:s');
-//     error_log("[{$time}] {$message}\n", 3, $file);
-// }
+/**
+ * @return string
+ * ww_tvc_product_api_log_type
+ * Log type for tvc product api
+ */
+function ww_tvc_product_api_log_type()
+{
+    return "product-api";
+}
+
+/**
+ * @return string
+ * ww_tvc_product_data_log_type
+ * Log type data related to apis when data is retried
+ */
+function ww_tvc_product_data_log_type()
+{
+    return "product-api-data";
+}
+
 
 /**
  * @return string[]
@@ -418,7 +420,7 @@ function start_import_batch($batch_id, $state)
         );
 
         $new_success = (int)$current['total_success'] + (int)$state_data['success'];
-        $new_failed  = (int)$current['total_failed'] + (int)$state_data['failed'];
+        $new_failed = (int)$current['total_failed'] + (int)$state_data['failed'];
 
         // Update with new values
         $wpdb->query(

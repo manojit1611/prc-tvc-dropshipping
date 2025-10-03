@@ -8,7 +8,6 @@ class MPI_Importer
 
     public function __construct()
     {
-
         add_action('init', [$this, 'register_custom_taxonomies']);
         add_filter('term_link', [$this, 'custom_model_term_link'], 10, 3);
         add_action('init', [$this, 'add_custom_rewrite_rules']);
@@ -201,11 +200,11 @@ class MPI_Importer
 
                 if (empty($tvc_product_data)) {
                     $invalid_records[] = ['Empty Product' => $sku];
-                    // add_import_error_log($batch_id, $tvc_product_data, 'Empty Product', 'product');
-                    // my_log_error('Empty Product' . $tvc_product_data);
+                    tvc_sync_log($sku . ' product skipped due to empty details from TVC SKU API', 'tvc-product-api');
                     continue;
                 }
 
+                // Validate Category Exists or not
                 if (function_exists('category_exists_by_code')) {
                     $checkCategory = category_exists_by_code($tvc_product_data['CatalogCode']);
                     if (!$checkCategory) {
@@ -235,7 +234,6 @@ class MPI_Importer
         }
 
         $failedSku = implode(',', $failedSku ?? []);
-
         $state = [
             'success' => $success_count,
             'failed' => $failure_count,
@@ -248,10 +246,8 @@ class MPI_Importer
         ];
 
         add_import_error_log($batch_id, json_encode($state), json_encode($successfully_processed), 'product');
-
         $productState = json_encode($this->syncProductState);
         update_post_meta($product_id, 'tvc_sync_log', $productState);
-
         return true;
     }
 
@@ -326,7 +322,7 @@ class MPI_Importer
         };
 
         // If empty product
-        if (empty($product_data)) {
+        if ($product_data['Code'] == 404) {
             $handle_error('Empty Product: ' . $sku);
         }
 
@@ -476,24 +472,23 @@ class MPI_Importer
         $name = $product_data['Title'] ?? 'Untitled';
         $description = $product_data['Description'] ?? '';
         $short_description = $product_data['ShortDescription'] ?? '';
-
-        // if (isset($product_data['PackageList']) && !empty($product_data['PackageList'])) {
-        //     $short_description .= "<ul>";
-        //     foreach ($product_data['PackageList'] as $package) {
-        //         $short_description .= "<li>{$package}</li>";
-        //     }
-        //     $short_description .= "</ul>";
-        // }
-
         $price = $product_data['Price'] ?? 0;
         $length = $product_data['Properties']['Length'] ?? '';
         $width = $product_data['Properties']['Width'] ?? '';
         $height = $product_data['Properties']['Height'] ?? '';
         $weight = $product_data['Properties']['Weight'] ?? '';
         $moq = $product_data['MinimumOrderQuantity'] ?? '';
-        $status = ($product_data['ProductStatus'] == 1) ? 'publish' : 'draft';
-        $stock_status_code = $product_data['StockStatus'] ?? 0;
+        $status = "publish";
+//        $status = ($product_data['ProductStatus'] == 1) ? 'publish' : 'draft';
 
+        // TVC stock normal and out of stock
+        $allowForPublishStatus = array(1);
+        if (!in_array($product_data['ProductStatus'], $allowForPublishStatus)) {
+            $status = 'draft';
+            tvc_sync_log("$sku status set for draft because status was: {$product_data['ProductStatus']}", 'product');
+        }
+
+        $stock_status_code = $product_data['StockStatus'] ?? 0;
         switch ($stock_status_code) {
             case 1:
                 $wc_stock_status = 'instock';
@@ -517,7 +512,6 @@ class MPI_Importer
                 $wc_stock_status = 'instock';
                 break;
         }
-
         $category_slug = strtolower($product_data['CatalogCode'] ?? '');
         $product_id = wc_get_product_id_by_sku($sku);
         if ($product_id) {
@@ -901,6 +895,7 @@ class MPI_Importer
                         "code" => $model_slug
                     ]
                 );
+
                 // Might be an error thrown
                 if (empty($model_id)) {
                     // Punch Log here

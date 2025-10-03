@@ -87,12 +87,13 @@ class MPI_API
 
         $args = [
             'headers' => [
-                'Accept'        => 'application/json',
+                'Accept' => 'application/json',
                 'Authorization' => 'TVC ' . $token,
             ],
             'timeout' => 360,
         ];
 
+        tvc_sync_log("TVC Product API Called with URL: " . $api_url, ww_tvc_product_api_log_type());
         $response = wp_remote_get($api_url, $args);
 
         if (is_wp_error($response)) {
@@ -114,19 +115,19 @@ class MPI_API
         $api_url = TVC_BASE_URL . "/order/shippingcostenhancement";
 
         $body = [
-            "skuinfo"          => $sku . "*" . 1,
-            "countrycode"      => "AU",
-            'currency'         => 'AUD'
+            "skuinfo" => $sku . "*" . 1,
+            "countrycode" => "AU",
+            'currency' => 'AUD'
         ];
 
         $args = [
             'headers' => [
-                'Accept'        => 'application/json',
-                'Content-Type'  => 'application/json', // important for JSON payload
+                'Accept' => 'application/json',
+                'Content-Type' => 'application/json', // important for JSON payload
                 'Authorization' => 'TVC ' . $token,
             ],
             'timeout' => 30,
-            'body'    => wp_json_encode($body), // convert array to JSON
+            'body' => wp_json_encode($body), // convert array to JSON
         ];
 
         $response = wp_remote_post($api_url, $args);

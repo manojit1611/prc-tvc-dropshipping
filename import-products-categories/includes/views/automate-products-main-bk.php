@@ -95,7 +95,7 @@ function ww_start_product_import($category_code = '', $beginDate = null, $endDat
     //        [$batch_id, $category_code, 1, null, $beginDate, $endDate]
     //    );
 
-    ww_import_product_batch($batch_id, $category_code, 1, null, $beginDate, $endDate);
+    // ww_import_product_batch($batch_id, $category_code, 1, null, $beginDate, $endDate);
     tvc_sync_log("Started new product batch $batch_id (category: $category_code)", 'product');
 }
 
