@@ -22,8 +22,9 @@ if (isset($_GET['delete_batch']) && !empty($_GET['delete_batch'])) {
 
 if (isset($_GET['stop_batch']) && !empty($_GET['stop_batch'])) {
     $batch_id = sanitize_text_field($_GET['stop_batch']);
+    $batch_name = sanitize_text_field($_GET['batch_name']);
     if (wp_verify_nonce($_GET['_wpnonce'], 'stop_batch_' . $batch_id)) {
-        ww_clear_all_product_batches($batch_id);
+        ww_clear_all_product_batches($batch_id, $batch_name);
 
         wp_safe_redirect(remove_query_arg(['stop_batch', '_wpnonce']));
         exit;
@@ -32,15 +33,16 @@ if (isset($_GET['stop_batch']) && !empty($_GET['stop_batch'])) {
 
 if (isset($_GET['restart_batch']) && !empty($_GET['restart_batch'])) {
     $batch_id = sanitize_text_field($_GET['restart_batch']);
+    $batch_name = sanitize_text_field($_GET['batch_name']);
     if (wp_verify_nonce($_GET['_wpnonce'], 'restart_batch_' . $batch_id)) {
-        ww_restart_product_batch($batch_id);
+        ww_restart_product_batch($batch_id, $batch_name);
 
         wp_safe_redirect(remove_query_arg(['restart_batch', '_wpnonce']));
         exit;
     }
 }
 
-function ww_restart_product_batch($batch_id)
+function ww_restart_product_batch($batch_id, $batch_name)
 {
     global $wpdb;
 
@@ -63,21 +65,21 @@ function ww_restart_product_batch($batch_id)
         }
     }
 
-    start_import_batch($batch_id);
+    start_import_batch($batch_name, $batch_id);
 
-    $filters['batch_id'] = $batch_id;
-    $batch_id = 'latest_products';
+    $filters['import_batch_id'] = $batch_id;
+    // $batch_name = 'latest_products';
 
     as_schedule_single_action(
         time(),
         'ww_import_product_batch',
-        [$batch_id, $filters]
+        [$batch_name, $filters]
     );
 
     tvc_sync_log("Restart product import jobs.", 'product');
 }
 
-function ww_clear_all_product_batches($batch_id)
+function ww_clear_all_product_batches($batch_id, $batch_name)
 {
     global $wpdb;
 
@@ -89,7 +91,7 @@ function ww_clear_all_product_batches($batch_id)
         )
     );
 
-    start_import_batch($batch_id, 'Stopped');
+    start_import_batch($batch_name, $batch_id, 'Stopped');
 
     // wp_clear_scheduled_hook('ww_import_product_batch');
     tvc_sync_log("Cleared all scheduled product import jobs.", 'product');
@@ -166,7 +168,8 @@ if (!$current_batch) {
                                 $stop_url = wp_nonce_url(
                                     add_query_arg([
                                         'page' => 'tvc-logs',
-                                        'stop_batch' => $batch->id
+                                        'stop_batch' => $batch->id,
+                                        'batch_name' => $batch->batch_id,
                                     ]),
                                     'stop_batch_' . $batch->id
                                 );
@@ -174,9 +177,10 @@ if (!$current_batch) {
                                 $restart_url = wp_nonce_url(
                                     add_query_arg([
                                         'page' => 'tvc-logs',
-                                        'restart_batch' => $batch->id
+                                        'restart_batch' => $batch->id,
+                                        'batch_name' => $batch->batch_id,
                                     ]),
-                                    'restart_batch_' . $batch->id
+                                    'restart_batch_' . $batch->id,
                                 );
                                 ?>
                                 <a href="<?php echo esc_url($stop_url); ?>"
@@ -368,7 +372,7 @@ if ($current_batch) {
             $skus = json_decode($log->success_skus, true);
             echo '<td>';
             if (!empty($skus) && is_array($skus)) {
-                echo implode(', ', array_map(function($sku) {
+                echo implode(', ', array_map(function ($sku) {
                     $url = admin_url('edit.php?post_status=all&post_type=product&s=' . urlencode($sku));
                     return '<a href="' . esc_url($url) . '" target="_blank">' . esc_html($sku) . '</a>';
                 }, $skus));
