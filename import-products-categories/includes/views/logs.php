@@ -368,7 +368,10 @@ if ($current_batch) {
             $skus = json_decode($log->success_skus, true);
             echo '<td>';
             if (!empty($skus) && is_array($skus)) {
-                echo implode(', ', array_map('esc_html', $skus));
+                echo implode(', ', array_map(function($sku) {
+                    $url = admin_url('edit.php?post_status=all&post_type=product&s=' . urlencode($sku));
+                    return '<a href="' . esc_url($url) . '" target="_blank">' . esc_html($sku) . '</a>';
+                }, $skus));
             } else {
                 echo '<em>No SKUs</em>';
             }
@@ -380,7 +383,8 @@ if ($current_batch) {
                 echo '<div><strong>Invalid Records:</strong><ul style="margin-left:15px;">';
                 foreach ($status['invalid_records'] as $invalid) {
                     foreach ($invalid as $msg => $sku) {
-                        echo '<li>' . esc_html($msg) . ' → <code>' . esc_html($sku) . '</code></li>';
+                        $url = admin_url('edit.php?post_status=all&post_type=product&s=' . urlencode($sku));
+                        echo '<li>' . esc_html($msg) . ' → <code><a href="' . esc_url($url) . '" target="_blank">' . esc_html($sku) . '</a></code></li>';
                     }
                 }
                 echo '</ul></div>';

@@ -506,7 +506,7 @@ function start_import_batch($batch_name, $batch_id = Null, $status = 'Running', 
         );
 
         if ($exists > 0) {
-            return $current->id; // or return 'exists'
+            return $current['id']; // or return 'exists'
         }
     } else if ($exists) {
         $wpdb->query(
