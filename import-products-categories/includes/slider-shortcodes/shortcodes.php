@@ -25,6 +25,7 @@ function custom_wc_slider_init_js()
     <script>
         jQuery(document).ready(function ($) {
 
+            // make element compatible with owl slider
             $('.woo-owl-slider ul.products').addClass('owl-carousel owl-theme');
 
 
@@ -55,11 +56,16 @@ function custom_wc_slider_init_js()
                 loop: true,
                 margin: 10,
                 nav: false,
-                dots: false,
-                items: 1,
+                dots: true,
+                responsive: {
+                    0: {items: 2},
+                    600: {items: 3},
+                    768: {items: 5},
+                    1200: {items: 5}
+                }
             });
 
-
+            // Product Slider Common
             $('.woo-owl-slider ul.products').owlCarousel({
                 loop: true,
                 margin: 20,
@@ -68,11 +74,11 @@ function custom_wc_slider_init_js()
                 responsive: {
                     0: {items: 2},
                     600: {items: 3},
-                    992: {items: 4},
+                    768: {items: 4},
+                    1024: {items: 5},
                     1200: {items: 6}
                 }
             });
-
 
             $('.fullwidth-banner-slider .owl-carousel').owlCarousel({
                 items: 1,
@@ -99,8 +105,33 @@ function custom_wc_slider_styles()
     ob_start(); ?>
     <style>
 
+        .products.owl-carousel {
+            display: flex !important;
+            width: 100% !important;
+            margin-left: 0 !important;
+            justify-content: center;
+            gap: 0 !important;
+        }
+
+        .ww-product-section__items-area {
+            overflow: hidden;
+        }
+
+        .ww-product-section {
+            margin-top: 40px;
+        }
+
+        .ww-product-section__entry-heading {
+            text-align: center;
+            margin-bottom: 1.5rem;
+        }
+
+        @media screen and (max-width: 1023px) {
+
+        }
 
         .owl-carousel .owl-nav {
+            left: 0;
             position: absolute;
             top: 50%;
             width: 100%;
@@ -112,13 +143,11 @@ function custom_wc_slider_styles()
 
         .owl-carousel .owl-nav button {
             pointer-events: all;
-            background: #333;
-            color: #fff;
-            border: none;
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            font-size: 20px;
+            /*background: #00303e !important;*/
+            /*color: #fff !important;*/
+            width: 25px;
+            height: 26px;
+            border-radius: 100%;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -313,37 +342,31 @@ function custom_wc_all_brands_shortcode($atts)
     ob_start();
 
     if (!empty($brands) && !is_wp_error($brands)) { ?>
-        <div class="ww-brands-section">
-            <h4><?php echo esc_html($atts['title']); ?></h4>
-            <ul class="woo-owl-brand-slider owl-carousel owl-theme ww-brands-row">
-                <?php
-                // split brands into slides (columns * rows per slide)
-                foreach (array_chunk($brands, $atts['columns'] * $atts['rows']) as $slide): ?>
-                    <li class="item">
-                        <div class="brand-slide">
-                            <?php
-                            // split each slide into rows
-                            foreach (array_chunk($slide, $atts['columns']) as $row): ?>
-                                <div class="brand-row">
-                                    <?php foreach ($row as $brand):
-                                        $thumb_id = get_term_meta($brand->term_id, 'thumbnail_id', true);
-                                        $img_url = $thumb_id ? wp_get_attachment_image_url($thumb_id, 'medium') : wc_placeholder_img_src();
-                                        $link = get_term_link($brand); ?>
-                                        <div class="brand-item">
-                                            <a href="<?php echo esc_url($link); ?>">
-                                                <img src="<?php echo esc_url($img_url); ?>"
-                                                     alt="<?php echo esc_attr($brand->name); ?>"
-                                                     style="max-width:100%;">
-                                                <h5><?php echo esc_html($brand->name); ?></h5>
-                                            </a>
-                                        </div>
-                                    <?php endforeach; ?>
-                                </div>
-                            <?php endforeach; ?>
+
+        <div class="ww-brands-section ww-product-section">
+            <div class="ww-product-section__entry-heading">
+                <h4><?php echo esc_html($atts['title']); ?></h4>
+            </div>
+            <div class="ww-product-section__items-area">
+                <ul class="woo-owl-brand-slider owl-carousel owl-theme ww-brands-row">
+                    <?php foreach ($brands as $brand):
+                        echo '<li class="brand-slide">';
+                        $thumb_id = get_term_meta($brand->term_id, 'thumbnail_id', true);
+                        $img_url = $thumb_id ? wp_get_attachment_image_url($thumb_id, 'medium') : wc_placeholder_img_src();
+                        $link = get_term_link($brand); ?>
+                        <div class="brand-item">
+                            <a href="<?php echo esc_url($link); ?>">
+                                <img src="<?php echo esc_url($img_url); ?>"
+                                     alt="<?php echo esc_attr($brand->name); ?>"
+                                     style="max-width:100%;">
+                                <h5><?php echo esc_html($brand->name); ?></h5>
+                            </a>
                         </div>
-                    </li>
-                <?php endforeach; ?>
-            </ul>
+                        <?php
+                        echo '</li>';
+                    endforeach; ?>
+                </ul>
+            </div>
         </div>
     <?php } else {
         echo '<p>No brands found.</p>';
