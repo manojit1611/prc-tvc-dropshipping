@@ -71,7 +71,8 @@ function ww_admin_category_pricing_page()
             'value' => floatval($_POST['ww_value'] ?? 0),
             'ship' => floatval($_POST['ww_ship'] ?? 0)
         ];
-        if (is_null($id)) $rules[] = $new_rule; else $rules[$id] = $new_rule;
+        if (is_null($id)) $rules[] = $new_rule;
+        else $rules[$id] = $new_rule;
         update_option('ww_rules', $rules);
         echo '<div class="updated"><p>Rule saved.</p></div>';
     }
@@ -89,65 +90,149 @@ function ww_admin_category_pricing_page()
     // Get top-level parents
     $parents = get_terms(['taxonomy' => 'product_cat', 'hide_empty' => false, 'parent' => 0]);
 
-    ?>
+?>
+    <style>
+        .ww-form {
+            max-width: 480px;
+            background: #fff;
+            border: 1px solid #dcdcdc;
+            border-radius: 10px;
+            padding: 25px 30px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+            font-family: "Segoe UI", Roboto, Arial, sans-serif;
+        }
+
+        .ww-form .ww-field {
+            margin-bottom: 18px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .ww-form .ww-label {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 6px;
+            font-size: 14px;
+        }
+
+        .ww-form .ww-input,
+        .ww-form select.ww-category-select,
+        .ww-form #ww_markup_type {
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            padding: 10px;
+            font-size: 14px;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            width: 100%;
+            max-width: 100%;
+        }
+
+        .ww-form .ww-input:focus,
+        .ww-form select:focus {
+            border-color: #2271b1;
+            box-shadow: 0 0 0 2px rgba(34, 113, 177, 0.2);
+            outline: none;
+        }
+
+        .ww-submit-wrap {
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        .ww-form .ww-button {
+            background-color: #2271b1 !important;
+            border: none !important;
+            border-radius: 6px;
+            padding: 10px 25px;
+            font-size: 15px;
+            transition: background-color 0.2s, transform 0.1s;
+        }
+
+        .ww-form .ww-button:hover {
+            background-color: #135e96 !important;
+            transform: translateY(-1px);
+        }
+
+        .select2 {
+            /* width: 100% !important; */
+            margin-bottom: 10px;
+        }
+    </style>
+
     <div class="wrap">
         <h1>WW Category Pricing Rules</h1>
         <h2>Add / Update Rule</h2>
-        <form method="post" id="ww_form">
+        <form method="post" id="ww_form" class="ww-form">
             <?php wp_nonce_field('ww_save_action', 'ww_nonce'); ?>
             <input type="hidden" name="ww_rule_id" id="ww_rule_id" value="">
-            <div id="ww_category_selects">
+
+            <div id="ww_category_selects" class="ww-field">
+                <label for="ww_category" class="ww-label">Category</label>
                 <select name="ww_category[]" class="ww-category-select" data-level="0">
                     <option value="">— Select Parent —</option>
-                    <?php foreach ($parents as $p) echo "<option value='{$p->term_id}'>{$p->name}</option>"; ?>
+                    <?php foreach ($parents as $p) {
+                        if ($p->name == 'Uncategorized') continue;
+                        echo "<option value='{$p->term_id}'>{$p->name}</option>";
+                    }
+                    ?>
                 </select>
             </div>
+
             <input type="hidden" name="ww_category" id="ww_category">
-            <select name="ww_markup_type" id="ww_markup_type">
-                <option value="percent">Percent</option>
-                <option value="fixed">Fixed</option>
-            </select>
-            <input type="number" step="0.01" name="ww_value" id="ww_value" placeholder="Value">
-            <input type="number" step="0.01" name="ww_ship" id="ww_ship" placeholder="Shipment Cost">
-            <input type="submit" name="ww_save" class="button button-primary" value="Save Rule">
+
+            <div class="ww-field">
+                <label for="ww_markup_type" class="ww-label">Markup Type</label>
+                <select name="ww_markup_type" id="ww_markup_type" class="ww-input">
+                    <option value="percent">Percent</option>
+                    <option value="fixed">Fixed</option>
+                </select>
+            </div>
+
+            <div class="ww-field">
+                <label for="ww_value" class="ww-label">Value</label>
+                <input type="number" step="0.01" name="ww_value" id="ww_value" class="ww-input" placeholder="Enter value">
+            </div>
+
+            <div class="ww-submit-wrap">
+                <input type="submit" name="ww_save" class="button button-primary ww-button" value="Save Rule">
+            </div>
         </form>
+
 
         <h2>All Rules</h2>
         <table class="widefat">
             <thead>
-            <tr>
-                <th>Category</th>
-                <th>Type</th>
-                <th>Value</th>
-                <th>Shipment</th>
-                <th>Actions</th>
-            </tr>
+                <tr>
+                    <th>Category</th>
+                    <th>Type</th>
+                    <th>Value</th>
+                    <th>Actions</th>
+                </tr>
             </thead>
             <tbody>
-            <?php if (empty($rules)) echo '<tr><td colspan="5">No rules</td></tr>';
-            else foreach ($rules as $i => $r) {
-                $term = get_term($r['cat'], 'product_cat');
-                $cat_name = $term ? $term->name : '—';
-                echo "<tr>
+                <?php if (empty($rules)) echo '<tr><td colspan="5">No rules</td></tr>';
+                else foreach ($rules as $i => $r) {
+                    $term = get_term($r['cat'], 'product_cat');
+                    $cat_name = $term ? $term->name : '—';
+                    echo "<tr>
                     <td>{$cat_name}</td>
                     <td>{$r['type']}</td>
                     <td>{$r['value']}</td>
-                    <td>{$r['ship']}</td>
                     <td>
                         <a href='" . wp_nonce_url(admin_url('admin.php?page=ww-category-pricing&delete=' . $i), 'ww_delete_rule', 'ww_nonce') . "' class='ww-delete'>Delete</a>
                     </td>
                 </tr>";
-            } ?>
+                } ?>
             </tbody>
         </table>
     </div>
 
     <script>
-        jQuery(function ($) {
+        jQuery(function($) {
             // Initialize first select
-            $(".ww-category-select").select2({width: "200px"});
+            $(".ww-category-select").select2();
 
-            $(document).on("change", ".ww-category-select", function () {
+            $(document).on("change", ".ww-category-select", function() {
                 let $current = $(this); // reference to current select
                 let val = $current.val();
                 $("#ww_category").val(val);
@@ -157,22 +242,35 @@ function ww_admin_category_pricing_page()
 
                 if (val) {
                     // Fetch children dynamically
-                    $.get(ajaxurl, {action: 'ww_get_children', parent: val}, function (data) {
+                    $.get(ajaxurl, {
+                        action: 'ww_get_children',
+                        parent: val
+                    }, function(data) {
                         if (data.length) {
                             let sel = $("<select>").addClass("ww-category-select").attr("data-level", parseInt($current.data("level")) + 1);
                             sel.append($("<option>").text("— Select —").val(""));
-                            $.each(data, function (i, t) {
+                            $.each(data, function(i, t) {
                                 sel.append($("<option>").val(t.term_id).text(t.name));
                             });
-                            $("#ww_category_selects").append(sel);
-                            sel.select2({width: "200px"});
+
+                            let container = $("#ww_category_selects");
+
+                            let existingSelects = container.find(".select2").length;
+                            if (existingSelects < 3) {
+                                container.append(sel);
+                            } else if (existingSelects === 3) {
+                                container.find(".select2").last().remove();
+                                container.append(sel);
+                            }
+
+                            sel.select2();
                         }
                     }, "json");
                 }
             });
 
             // Delete rule
-            $(document).on("click", ".ww-delete", function (e) {
+            $(document).on("click", ".ww-delete", function(e) {
                 e.preventDefault();
                 if (confirm("Delete this rule?")) location.href = $(this).attr("href");
             });
@@ -182,5 +280,5 @@ function ww_admin_category_pricing_page()
             var ww_rules = <?php echo json_encode(array_values($rules)); ?>;
         });
     </script>
-    <?php
+<?php
 }

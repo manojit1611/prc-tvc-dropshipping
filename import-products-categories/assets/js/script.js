@@ -23,7 +23,15 @@ jQuery(document).ready(function ($) {
         function (response) {
           ww_stop_preloader();
           if (response.success) {
-            container.append(response.data);
+            let existingSelects = container.find(".select2").length;
+
+            if (existingSelects < 3) {
+              container.append(response.data);
+            } else if (existingSelects === 3) {
+              container.find(".select2").last().remove();
+              container.append(response.data);
+            }
+
             $("select.select2").select2();
           } else {
             console.log(response);
