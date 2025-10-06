@@ -76,22 +76,33 @@ jQuery(document).on(
     if (is_parent) {
       child_containerEl.empty();
     }
+
     if (!slug) {
       console.log("Parent Category is not selected");
       return;
     }
+
     let apiParams = {
       slug: slug,
       mode: "tvc_api",
     };
+
     ww_start_preloader();
     try {
       // Wait for AJAX response
       let response = await ww_mpi_get_child_categories(apiParams);
       ww_stop_preloader();
-      
+
       if (response.success) {
-        child_containerEl.append(response.data);
+        let existingSelects = child_containerEl.find(".select2").length;
+
+        if (existingSelects < 3) {
+          child_containerEl.append(response.data);
+        } else if (existingSelects === 3) {
+          child_containerEl.find(".select2").last().remove();
+          child_containerEl.append(response.data);
+        }
+
         jQuery("select.select2").select2();
       } else {
         formEl.append(

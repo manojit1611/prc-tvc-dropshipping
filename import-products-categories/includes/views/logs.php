@@ -20,10 +20,11 @@ if (isset($_GET['delete_batch']) && !empty($_GET['delete_batch'])) {
     }
 }
 
-if (isset($_GET['stop_batch']) && !empty($_GET['stop_batch'])) {
-    $batch_id = sanitize_text_field($_GET['stop_batch']);
-    $batch_name = sanitize_text_field($_GET['batch_name']);
-    if (wp_verify_nonce($_GET['_wpnonce'], 'stop_batch_' . $batch_id)) {
+if (isset($_GET['stop_batch_name']) && !empty($_GET['stop_batch_name'])) {
+    $batch_name = sanitize_text_field($_GET['stop_batch_name']);
+    $batch_id = sanitize_text_field($_GET['stop_batch_id']);
+
+    if (wp_verify_nonce($_GET['_wpnonce'], 'stop_batch_' . $batch_name)) {
         ww_clear_all_product_batches($batch_id, $batch_name);
 
         wp_safe_redirect(remove_query_arg(['stop_batch', '_wpnonce']));
@@ -48,28 +49,25 @@ function ww_restart_product_batch($batch_id, $batch_name)
 
     $row = $wpdb->get_row(
         $wpdb->prepare(
-            "SELECT status 
-            FROM {$wpdb->prefix}tvc_import_logs 
-            WHERE import_batch_id = %d 
-            ORDER BY id DESC 
+            "SELECT current_args 
+            FROM {$wpdb->prefix}tvc_import_batches 
+            WHERE batch_id = %d 
             LIMIT 1",
-            $batch_id
+            $batch_name
         )
     );
 
     if ($row) {
-        $status = json_decode($row->status, true);
-
-        if (isset($status['filters'])) {
-            $filters = $status['filters'];
-        }
+        $args = json_decode($row->current_args, true);
     }
-    $filters['import_batch_id'] = $batch_id;
+
     as_schedule_single_action(
         time(),
         'ww_import_product_batch',
-        [$batch_name, $filters]
+        [$batch_name, $args]
     );
+
+    ww_tvc_log_update_batch_status($batch_id, ww_tvc_batch_pending_status_flag());
 
     tvc_sync_log("Restart product import jobs.", 'product');
 }
@@ -81,16 +79,17 @@ function ww_clear_all_product_batches($batch_id, $batch_name)
         $wpdb->prepare(
             "DELETE FROM {$wpdb->prefix}actionscheduler_actions 
             WHERE args LIKE %s",
-            '%' . $wpdb->esc_like($batch_id) . '%'
+            '%' . $wpdb->esc_like($batch_name) . '%'
         )
     );
+
     // Mark as cancel
     ww_tvc_log_update_batch_status($batch_id, ww_tvc_batch_cancel_status_flag());
 }
 
 
 if (!$current_batch) {
-    ?>
+?>
     <?php
     global $wpdb;
 
@@ -121,79 +120,98 @@ if (!$current_batch) {
 
         <table class="widefat fixed striped">
             <thead>
-            <tr>
-                <th>Date</th>
-                <th>Batch ID</th>
-                <th>Total Success</th>
-                <th>Total Failed</th>
-                <th>Status</th>
-                <th>View Logs</th>
-                <th>Actions</th>
-            </tr>
+                <tr>
+                    <th>Date</th>
+                    <th>Batch ID</th>
+                    <th>Total Success</th>
+                    <th>Total Failed</th>
+                    <th>Status</th>
+                    <th>View Logs</th>
+                    <th>Actions</th>
+                </tr>
             </thead>
             <tbody>
-            <?php if (!empty($batches)) :
-                foreach ($batches as $batch) :
-                    ?>
+                <?php if (!empty($batches)) :
+                    foreach ($batches as $batch) :
+                ?>
+                        <tr>
+                            <td><?php echo esc_html(date('Y-m-d H:i', strtotime($batch->created_at))); ?></td>
+                            <td><?php echo esc_html($batch->batch_id); ?></td>
+                            <td><?php echo esc_html($batch->total_success); ?></td>
+                            <td><?php echo esc_html($batch->total_failed); ?></td>
+                            <td>
+                                <?php
+                                switch ($batch->status) {
+                                    case 0:
+                                        echo "Pending";
+                                        break;
+                                    case 1:
+                                        echo "Running";
+                                        break;
+                                    case 2:
+                                        echo "Complete";
+                                        break;
+                                    case 3:
+                                        echo "Canceled";
+                                        break;
+                                }
+                                ?>
+                            </td>
+                            <td>
+                                <a href="<?php echo esc_url(admin_url('admin.php?page=tvc-logs&import_id=' . $batch->id)); ?>"
+                                    class="button button-small">
+                                    View Logs
+                                </a>
+                            </td>
+                            <td>
+                                <?php
+                                $delete_url = wp_nonce_url(
+                                    add_query_arg([
+                                        'page' => 'tvc-logs',
+                                        'delete_batch' => $batch->id
+                                    ]),
+                                    'delete_batch_' . $batch->id
+                                );
+
+                                $stop_url = wp_nonce_url(
+                                    add_query_arg([
+                                        'page' => 'tvc-logs',
+                                        'stop_batch_name' => $batch->batch_id,
+                                        'stop_batch_id' => $batch->id,
+                                    ]),
+                                    'stop_batch_' . $batch->batch_id,
+                                );
+
+                                $restart_url = wp_nonce_url(
+                                    add_query_arg([
+                                        'page' => 'tvc-logs',
+                                        'restart_batch' => $batch->id,
+                                        'batch_name' => $batch->batch_id,
+                                    ]),
+                                    'restart_batch_' . $batch->id,
+                                );
+                                ?>
+                                <a href="<?php echo esc_url($stop_url); ?>"
+                                    class="button button-small button-danger"
+                                    onclick="return confirm('Are you sure you want to Stop this batch');">Stop</a>
+
+                                <?php if (!str_contains($batch->batch_id, "AUTO_PRODUCT_PULL") || ($batch->status == 3 && $batch->status == 0)) { ?>
+                                    <a href="<?php echo esc_url($restart_url); ?>"
+                                        class="button button-small button-danger"
+                                        onclick="return confirm('Are you sure you want to restart this batch');">Start/Restart</a>
+                                <?php } ?>
+
+                                <a href="<?php echo esc_url($delete_url); ?>"
+                                    class="button button-small button-danger"
+                                    onclick="return confirm('Are you sure you want to delete this batch and all related logs?');">Delete</a>
+                            </td>
+                        </tr>
+                    <?php endforeach;
+                else : ?>
                     <tr>
-                        <td><?php echo esc_html(date('Y-m-d H:i', strtotime($batch->created_at))); ?></td>
-                        <td><?php echo esc_html($batch->batch_id); ?></td>
-                        <td><?php echo esc_html($batch->total_success); ?></td>
-                        <td><?php echo esc_html($batch->total_failed); ?></td>
-                        <td><?php echo esc_html($batch->status); ?></td>
-                        <td>
-                            <a href="<?php echo esc_url(admin_url('admin.php?page=tvc-logs&import_id=' . $batch->id)); ?>"
-                               class="button button-small">
-                                View Logs
-                            </a>
-                        </td>
-                        <td>
-                            <?php
-                            $delete_url = wp_nonce_url(
-                                add_query_arg([
-                                    'page' => 'tvc-logs',
-                                    'delete_batch' => $batch->id
-                                ]),
-                                'delete_batch_' . $batch->id
-                            );
-
-                            $stop_url = wp_nonce_url(
-                                add_query_arg([
-                                    'page' => 'tvc-logs',
-                                    'stop_batch' => $batch->id,
-                                    'batch_name' => $batch->batch_id,
-                                ]),
-                                'stop_batch_' . $batch->id
-                            );
-
-                            $restart_url = wp_nonce_url(
-                                add_query_arg([
-                                    'page' => 'tvc-logs',
-                                    'restart_batch' => $batch->id,
-                                    'batch_name' => $batch->batch_id,
-                                ]),
-                                'restart_batch_' . $batch->id,
-                            );
-                            ?>
-                            <a href="<?php echo esc_url($stop_url); ?>"
-                               class="button button-small button-danger"
-                               onclick="return confirm('Are you sure you want to Stop this batch');">Stop</a>
-
-                            <a href="<?php echo esc_url($restart_url); ?>"
-                               class="button button-small button-danger"
-                               onclick="return confirm('Are you sure you want to restart this batch');">Start/Restart</a>
-
-                            <a href="<?php echo esc_url($delete_url); ?>"
-                               class="button button-small button-danger"
-                               onclick="return confirm('Are you sure you want to delete this batch and all related logs?');">Delete</a>
-                        </td>
+                        <td colspan="5">No batches found.</td>
                     </tr>
-                <?php endforeach;
-            else : ?>
-                <tr>
-                    <td colspan="5">No batches found.</td>
-                </tr>
-            <?php endif; ?>
+                <?php endif; ?>
             </tbody>
         </table>
 
@@ -220,7 +238,7 @@ if (!$current_batch) {
             </div>
         <?php endif; ?>
     </div>
-    <?php
+<?php
 }
 
 ?>
@@ -257,7 +275,7 @@ if (!$current_batch) {
 global $wpdb;
 
 $current_batch = isset($_GET['import_id']) ? sanitize_text_field($_GET['import_id']) : '';
-$logs_table = $wpdb->prefix . 'tvc_import_logs';
+$logs_table = $wpdb->prefix . 'tvc_product_sync_logs';
 
 if ($current_batch) {
     // Pagination setup for logs
@@ -267,13 +285,13 @@ if ($current_batch) {
 
     // Total logs count
     $total_logs = $wpdb->get_var($wpdb->prepare(
-        "SELECT COUNT(*) FROM $logs_table WHERE import_batch_id = %s",
+        "SELECT COUNT(*) FROM $logs_table WHERE batch_id = %s",
         $current_batch
     ));
 
     // Fetch logs with limit & offset
     $logs = $wpdb->get_results($wpdb->prepare(
-        "SELECT * FROM $logs_table WHERE import_batch_id = %s ORDER BY id DESC LIMIT %d OFFSET %d",
+        "SELECT * FROM $logs_table WHERE batch_id = %s ORDER BY id DESC LIMIT %d OFFSET %d",
         $current_batch,
         $per_page,
         $offset
@@ -284,115 +302,29 @@ if ($current_batch) {
     if (!empty($logs)) {
         echo '<table class="widefat fixed striped" style="width:98%;">';
         echo '<thead><tr>';
-        echo '<th>Type</th>';
+        echo '<th>SKU</th>';
         echo '<th>Status</th>';
-        echo '<th>Filters</th>';
-        echo '<th>Success SKUs</th>';
-        echo '<th>Invalid records</th>';
-        echo '<th>Failed records</th>';
         echo '</tr></thead><tbody>';
 
         foreach ($logs as $log) {
             echo '<tr>';
 
             // Type
-            echo '<td>' . esc_html(ucfirst($log->type)) . '</td>';
-
-            // Status badges
-            $status = json_decode($log->status, true);
-            echo '<td>';
-            if (is_array($status)) {
-
-                // Begin inner table
-                echo '<table class="tvc-status-table" style="width:100%; border-collapse: collapse;">';
-                echo '<thead><tr>';
-                echo '<th style="border:1px solid #ccc;padding:4px;">Key</th>';
-                echo '<th style="border:1px solid #ccc;padding:4px;">Value</th>';
-                echo '</tr></thead><tbody>';
-
-                // Badge map
-                $badge_map = [
-                    'success' => 'tvc-status-success',
-                    'failed' => 'tvc-status-failed',
-                    'created' => 'tvc-status-created',
-                    'updated' => 'tvc-status-updated',
-                    'total_processed' => 'tvc-status-success',
-                ];
-
-                foreach ($status as $key => $val) {
-                    // skip arrays first
-                    if (in_array($key, ['invalid_records', 'filters', 'failed_records'], true)) {
-                        continue;
-                    }
-
-                    $class = isset($badge_map[$key]) ? $badge_map[$key] : 'tvc-status-success';
-                    $value = is_scalar($val) ? $val : json_encode($val);
-
-                    echo '<tr>';
-                    echo '<td style="border:1px solid #ccc;padding:4px;"><b>' . esc_html(ucfirst(str_replace('_', ' ', $key))) . '</b></td>';
-                    echo '<td style="border:1px solid #ccc;padding:4px;">' . esc_html($value) . '</td>';
-                    echo '</tr>';
-                }
-
-                // Stage row
-                if (!empty($status['stage'])) {
-                    echo '<tr>';
-                    echo '<td style="border:1px solid #ccc;padding:4px;"><strong>Stage</strong></td>';
-                    echo '<td style="border:1px solid #ccc;padding:4px;">' . esc_html($status['stage']) . '</td>';
-                    echo '</tr>';
-                }
-
-                echo '</tbody></table>';
-            } else {
-                echo esc_html($log->status);
-            }
-
-            echo '</td>';
+            $url = admin_url('admin-ajax.php?redirect=true&action=product_fetch&sku=' . $log->tvc_sku);
+            echo '<td><a href="' . esc_url($url) . '" target="_blank">' . esc_html($log->tvc_sku) . '</a></td>';
 
             echo '<td>';
-            if (!empty($status['filters']) && is_array($status['filters'])) {
-                foreach ($status['filters'] as $filterKey => $filterVal) {
-                    $filterVal = $filterVal === null ? 'null' : $filterVal;
-                    echo '<li>' . esc_html(ucfirst(str_replace('_', ' ', $filterKey))) . ': <code>' . esc_html($filterVal) . '</code></li>';
-                }
-                echo '</ul></div>';
-            }
-            echo '</td>';
-
-
-            // Success SKUs column (like before)
-            $skus = json_decode($log->success_skus, true);
-            echo '<td>';
-            if (!empty($skus) && is_array($skus)) {
-                echo implode(', ', array_map(function ($sku) {
-                    $url = admin_url('edit.php?post_status=all&post_type=product&s=' . urlencode($sku));
-                    return '<a href="' . esc_url($url) . '" target="_blank">' . esc_html($sku) . '</a>';
-                }, $skus));
-            } else {
-                echo '<em>No SKUs</em>';
+            switch ($log->status) {
+                case 1:
+                    echo "Inserted";
+                    break;
+                case 2:
+                    echo "Failed";
+                    break;
             }
             echo '</td>';
 
             echo '<td>';
-            // Invalid records list
-            if (!empty($status['invalid_records']) && is_array($status['invalid_records'])) {
-                echo '<div><strong>Invalid Records:</strong><ul style="margin-left:15px;">';
-                foreach ($status['invalid_records'] as $invalid) {
-                    foreach ($invalid as $msg => $sku) {
-                        $url = admin_url('edit.php?post_status=all&post_type=product&s=' . urlencode($sku));
-                        echo '<li>' . esc_html($msg) . ' → <code><a href="' . esc_url($url) . '" target="_blank">' . esc_html($sku) . '</a></code></li>';
-                    }
-                }
-                echo '</ul></div>';
-            }
-            echo '</td>';
-
-            $skus = $log->failed_sku;
-            echo '<td>';
-            echo $skus;
-            echo '</td>';
-
-            echo '</tr>';
         }
         echo '</tbody></table>';
 
