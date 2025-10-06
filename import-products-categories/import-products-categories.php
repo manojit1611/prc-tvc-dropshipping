@@ -392,16 +392,16 @@ add_action('manage_product_posts_custom_column', function ($column, $post_id) {
 
 // 3. Add JavaScript to handle popup toggle
 add_action('admin_footer', function () {
-?>
+    ?>
     <script>
-        jQuery(document).ready(function($) {
-            $('.show-log-popup').on('click', function(e) {
+        jQuery(document).ready(function ($) {
+            $('.show-log-popup').on('click', function (e) {
                 e.preventDefault();
                 var target = $(this).data('target');
                 $(target).fadeIn();
             });
 
-            $(document).on('click', '.close-log-popup', function(e) {
+            $(document).on('click', '.close-log-popup', function (e) {
                 e.preventDefault();
                 $(this).closest('.log-popup').fadeOut();
             });
@@ -423,31 +423,27 @@ add_action('admin_footer', function () {
             min-width: 300px;
         }
     </style>
-<?php
+    <?php
 });
 
 // === Includes ===
-require_once TVC_MPI_PLUGIN_PATH . 'includes/table/create_table.php';
-//add_action('init', function () {
-//    tvc_plugin_create_tables();
-//});
+require __DIR__ . '/ww-tvc-logs.php';
+require __DIR__ . '/plugins/ww-category-pricing.php';
+require __DIR__ . '/plugins/also-available-products.php';
 require __DIR__ . '/includes/views/automate-product-cat.php';
 require __DIR__ . '/includes/views/automate-products.php';
-
 require_once TVC_MPI_PLUGIN_PATH . 'includes/class-mpi-admin.php';
 require_once TVC_MPI_PLUGIN_PATH . 'includes/class-mpi-api.php';
 require_once TVC_MPI_PLUGIN_PATH . 'includes/class-mpi-importer.php';
 require_once TVC_MPI_PLUGIN_PATH . 'includes/helpers.php';
 require_once TVC_MPI_PLUGIN_PATH . 'includes/tvc-flush-wooocommerce.php';
 require_once TVC_MPI_PLUGIN_PATH . 'includes/tvc-product-manipulation.php';
-
 require_once TVC_MPI_PLUGIN_PATH . 'includes/api/get-products-by-date.php';
 require_once TVC_MPI_PLUGIN_PATH . 'includes/api/get-manufacturer-by-post.php';
 require_once TVC_MPI_PLUGIN_PATH . 'includes/api/get-model-by-post.php';
-
 require_once TVC_MPI_PLUGIN_PATH . 'includes/slider-shortcodes/shortcodes.php';
-
 require_once TVC_MPI_PLUGIN_PATH . 'includes/stock-qty-manipulation.php';
+require_once TVC_MPI_PLUGIN_PATH . 'includes/table/create_table.php';
 
 // === Init Plugin ===
 add_action('plugins_loaded', function () {
@@ -457,114 +453,7 @@ add_action('plugins_loaded', function () {
 });
 
 
-// Logging import batches and errors
-function start_import_batch($batch_name, $batch_id = Null, $status = 'Running', $state = "")
-{
-    global $wpdb;
-    $batches_table = $wpdb->prefix . 'tvc_import_batches';
-
-    // Sanitize batch_id first
-    $batch_id = sanitize_text_field($batch_id);
-
-    // Check if batch exists
-    $exists = $wpdb->get_var(
-        $wpdb->prepare(
-            "SELECT COUNT(*) FROM $batches_table WHERE id = %s",
-            $batch_id
-        )
-    );
-
-    $state_data = json_decode($state, true);
-    if ($exists && $state_data && isset($state_data['success'], $state_data['failed'])) {
-        // Fetch current totals
-        $current = $wpdb->get_row(
-            $wpdb->prepare(
-                "SELECT id, total_success, total_failed 
-                FROM $batches_table 
-                WHERE id = %s",
-                $batch_id
-            ),
-            ARRAY_A
-        );
-
-        $new_success = (int)$current['total_success'] + (int)$state_data['success'];
-        $new_failed = (int)$current['total_failed'] + (int)$state_data['failed'];
-
-        // Update with new values
-        $wpdb->query(
-            $wpdb->prepare(
-                "UPDATE $batches_table
-                SET total_success = %d,
-                    total_failed  = %d,
-                    status = %s
-                WHERE id = %s",
-                $new_success,
-                $new_failed,
-                $status,
-                $batch_id
-            )
-        );
-
-        if ($exists > 0) {
-            return $current['id']; // or return 'exists'
-        }
-    } else if ($exists) {
-        $wpdb->query(
-            $wpdb->prepare(
-                "UPDATE $batches_table
-                SET status = %s
-                WHERE id = %s",
-                $status,
-                $batch_id
-            )
-        );
-
-        return true;
-    } else if (!$exists) {
-        $wpdb->insert(
-            $batches_table,
-            [
-                'batch_id' => $batch_name,
-                'created_at' => current_time('mysql'),
-                'total_success' => 0,
-                'total_failed' => 0,
-                'status' => 'In Queue'
-            ],
-            [
-                '%s',
-                '%s'
-            ]
-        );
-
-        return $wpdb->insert_id; // inserted
-    }
-}
-
-function add_import_error_log($batch_name, $batch_id, $state, $success_skus, $type)
-{
-    global $wpdb;
-    $logs_table = $wpdb->prefix . 'tvc_import_logs';
-    $logId = start_import_batch($batch_name, $batch_id, 'Running', $state);
-
-    $wpdb->insert(
-        $logs_table,
-        [
-            'import_batch_id' => $logId,
-            'status' => maybe_serialize($state),
-            'success_skus' => maybe_serialize($success_skus),
-            'failed_sku' => maybe_serialize($state['failed_records'] ?? []),
-            'type' => $type,
-        ],
-        [
-            '%s',
-            '%s',
-            '%s',
-            '%s'
-        ]
-    );
-}
-
-function enqueue_select2_assets()
+function ww_tvc_enqueue_select2_assets()
 {
     // Select2 CSS
     wp_enqueue_style('select2-css', 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css');
@@ -580,4 +469,24 @@ function enqueue_select2_assets()
     ");
 }
 
-add_action('admin_enqueue_scripts', 'enqueue_select2_assets');
+add_action('admin_enqueue_scripts', 'ww_tvc_enqueue_select2_assets');
+
+
+// Custom Actions
+add_action('init', function () {
+
+    // Release Lock if current automation is running
+    $tvc_auto_product_pull_running_clear = $_GET['tvc_auto_product_pull_running_clear'] ?? '';
+    if ($tvc_auto_product_pull_running_clear) {
+        update_option('tvc_auto_product_pull_running', false, false);
+    }
+    // Update Last Sync Time of automation
+//    $set_tvc_last_sync_time = $_GET['set_tvc_last_sync_time'] ?? '';
+//    if($set_tvc_last_sync_time){
+//        $endDate = date('Y-m-d\TH:i:s', $current_time);
+//        update_option('tvc_last_sync_time', $endDate, false);
+//    }
+
+});
+
+register_activation_hook(__FILE__, 'tvc_plugin_create_tables');

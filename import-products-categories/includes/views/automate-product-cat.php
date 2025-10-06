@@ -69,18 +69,12 @@ function ww_import_category_level($batch_id, $parent_code = null, $parent_id = 0
         $invalid_records = [];
         foreach ($categories as $cat) {
             $stage = 'Processing';
-
             if (empty($cat['Name']) || empty($cat['Code'])) {
-                $invalid_records[] = $cat;
-                tvc_sync_log("Skipped invalid cat record under parent {$parent_desc}");
+                tvc_sync_log("Skipped invalid cat record under parent {$parent_desc}",'category');
                 continue;
             }
 
-            tvc_sync_log("Category data: " . print_r($cat, true));
-
-            // echo "<pre>";
-            // print_r($cat); // Debug output
-            // die;
+            tvc_sync_log("Category data: " . json_encode($cat), 'category');
 
             $name = sanitize_text_field($cat['Name']);
             $code = sanitize_text_field($cat['Code']);
@@ -106,7 +100,7 @@ function ww_import_category_level($batch_id, $parent_code = null, $parent_id = 0
                     'slug' => $slug,
                     'parent' => $parent_id,
                 ]);
-                $updated_count++;
+
                 tvc_sync_log("Updated category: {$name} (code {$code})");
             } else {
                 $new_term = wp_insert_term($name, 'product_cat', [
@@ -118,10 +112,8 @@ function ww_import_category_level($batch_id, $parent_code = null, $parent_id = 0
                     continue;
                 }
                 $term_id = $new_term['term_id'];
-                $created_count++;
                 tvc_sync_log("Created category: {$name} (code {$code})");
             }
-            $successfully_processed[] = $code;
 
             update_term_meta($term_id, '_tvc_product_cat_code', $code);
 
@@ -131,8 +123,7 @@ function ww_import_category_level($batch_id, $parent_code = null, $parent_id = 0
                 break;
             }
 
-            $success_count++;
-            // ✅ NEW: Only schedule if this category actually has sub-categories
+            // ✅ NEW: Only schedule if this category actually has subcategories
             $child_cats = ww_get_categories_level($code);
             if (!empty($child_cats)) {
                 $delay = 3 + ($i * 2);
@@ -148,32 +139,15 @@ function ww_import_category_level($batch_id, $parent_code = null, $parent_id = 0
 
             $i++;
         }
-        $stage = 'Completed';
     } catch (Exception $e) {
-        $failure_count++;
-        $stage = 'Failed';
-
         tvc_sync_log("Exception during import for parent {$parent_desc}: " . $e->getMessage());
     }
 
-    $state = [
-        'success' => $success_count,
-        'failed' => $failure_count,
-        'created' => $created_count,
-        'updated' => $updated_count,
-        'total_processed' => $success_count + $failure_count,
-        'stage' => $stage,
-        'invalid_records' => $invalid_records
-    ];
-
-    add_import_error_log($batch_id, json_encode($state), json_encode($successfully_processed), 'category');
 
     // Release lock
     delete_transient($lock_key);
     tvc_sync_log("Completed run for parent: {$parent_desc}");
 }
-
-
 // Hook for scheduled child jobs
 add_action('ww_import_child_level', 'ww_import_category_level', 10, 3);
 

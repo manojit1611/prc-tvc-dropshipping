@@ -2,6 +2,7 @@
     select {
         width: 100%;
     }
+
     div#child-category-container:empty {
         margin-bottom: 0 !important;
     }
@@ -45,7 +46,8 @@
                 <tr>
                     <th scope="row"><label for="parent_category">Parent Category</label></th>
                     <td>
-                        <select required name="tvc_parent_category_code" class="select2" id="parent_category" style="min-width: 250px;">
+                        <select required name="tvc_parent_category_code" class="select2" id="parent_category"
+                                style="min-width: 250px;">
                             <option value="">-- Select Parent Category --</option>
                             <?php
                             $parent_cats = ww_tvs_get_allowed_channel_product_cats();
@@ -64,7 +66,8 @@
                 <tr>
                     <th scope="row">Child Categories</th>
                     <td>
-                        <div id="child-category-container" style="margin-top:10px;grid-gap: 10px;display: flex;flex-wrap: wrap"></div>
+                        <div id="child-category-container"
+                             style="margin-top:10px;grid-gap: 10px;display: flex;flex-wrap: wrap"></div>
                         <p class="description">Child categories will appear here dynamically.</p>
                     </td>
                 </tr>
@@ -96,7 +99,9 @@ if (isset($_POST['tvc_parent_category_code'])) {
     $parent_code = $categoryCode;
     $sync_type = $_POST['sync_type'] ?? '';
     if ($sync_type == 'products') {
-        ww_start_product_import($categoryCode);
+        ww_start_product_import($categoryCode, null, null, array(
+            'import_batch_id' => "CAT_PRODUCT_{$categoryCode}_" . time()
+        ));
     } else {
         echo "Product Sync ype is not set";
     }

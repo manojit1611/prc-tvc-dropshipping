@@ -13,11 +13,11 @@ class MPI_Admin
     public function add_admin_menu()
     {
         add_menu_page(
-            __('TVC Drop Shipping', 'import-products-categories'), // Menu Title
-            __('TVC Drop Shipping', 'import-products-categories'), // Page Title
+            __('TVC Store', 'import-products-categories'), // Menu Title
+            __('TVC Store', 'import-products-categories'), // Page Title
             'manage_options',
-            'tvc-main', // Slug for main page
-            [$this, 'render_admin_page'], // Callback for main page
+            'tvc-main', // Slug for the main page
+            [$this, 'render_admin_page'], // Callback for the main page
             'dashicons-products', // Icon
             26 // Position
         );
@@ -44,8 +44,8 @@ class MPI_Admin
         // Submenu: Product Fetch By SKU
         add_submenu_page(
             'tvc-main',
-            __('Product Fetch By SKU', 'import-products-categories'),
-            __('Product Fetch By SKU', 'import-products-categories'),
+            __('Fetch By SKU', 'import-products-categories'),
+            __('Fetch By SKU', 'import-products-categories'),
             'manage_options',
             'product-fetch-by-sku',
             [$this, 'fetch_by_sku_admin_page']
@@ -54,13 +54,21 @@ class MPI_Admin
         // Submenu: Product Fetch By Date
         add_submenu_page(
             'tvc-main',
-            __('Product Fetch By Date', 'import-products-categories'),
-            __('Product Fetch By Date', 'import-products-categories'),
+            __('Fetch By Date', 'import-products-categories'),
+            __('Fetch By Date', 'import-products-categories'),
             'manage_options',
             'product-fetch-by-date',
             [$this, 'fetch_by_date_admin_page']
         );
 
+        add_submenu_page(
+            'tvc-main', // Parent slug
+            'Category Pricing',
+            'Category Pricing',
+            'manage_woocommerce',
+            'ww-category-pricing',
+            'ww_admin_category_pricing_page'
+        );
 
         add_submenu_page(
             'tvc-main',
@@ -69,6 +77,46 @@ class MPI_Admin
             'manage_options',
             'tvc-logs',
             [$this, 'render_tvc_import_logs_page']
+        );
+
+
+
+        add_submenu_page(
+            'tvc-main', // Parent slug
+            'Woo Logs',    // Page title
+            'Woo Logs',        // Menu title
+            'manage_woocommerce', // Capability
+            'wc-logs-link', // Menu slug (unique)
+            function () {
+                // Redirect to the WooCommerce Logs page
+                wp_redirect(admin_url('admin.php?page=wc-status&tab=logs'));
+                exit;
+            },
+            99 // Position
+        );
+
+        add_submenu_page(
+            'tvc-main', // Parent slug
+            'Schedulers',   // Page title
+            'Schedulers',   // Menu title
+            'manage_woocommerce', // Capability
+            'ww_import_redirect', // Menu slug (unique)
+            function () {
+                // Redirect directly to your custom status tab
+                wp_redirect(admin_url('admin.php?page=wc-status&status=pending&tab=action-scheduler&s=ww_import_product_batch&paged=1'));
+                exit;
+            },
+            99 // Position in submenu
+        );
+
+
+        add_submenu_page(
+            'tvc-main', // Parent slug
+            'Reset Everything',
+            'Reset Everything',
+            'manage_options',
+            'reset-woocommerce',
+            'ww_tvc_wc_reset_page'
         );
 
 

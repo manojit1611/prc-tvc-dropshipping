@@ -1,6 +1,5 @@
 <?php
 
-register_activation_hook(__FILE__, 'tvc_plugin_create_tables');
 
 function tvc_plugin_create_tables()
 {
@@ -69,15 +68,40 @@ function tvc_plugin_create_tables()
 
 
     // Table 6: Import Batches
-    $table6 = $wpdb->prefix . 'tvc_import_batches';
-    $sql6 = "CREATE TABLE wp_tvc_import_batches (
+    $sql6 = "CREATE TABLE ".$wpdb->prefix . 'tvc_import_batches'." (
         id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
         batch_id LONGTEXT NULL,
         total_success INT NULL,
         total_failed INT NULL,
+        status varchar(12) NULL,
+        sync_type TINYINT default 0,
         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (id)
     );";
+
+
+    // Individual product sync log
+    $tvc_product_sync_logs_table_name = $wpdb->prefix . 'tvc_product_sync_logs';
+    $sql_product_sync_log = "CREATE TABLE IF NOT EXISTS `$tvc_product_sync_logs_table_name` (
+        `id` bigint NOT NULL AUTO_INCREMENT,
+        `batch_id` longtext,
+        `tvc_sku` varchar(200) DEFAULT NULL,
+        `status` tinyint NOT NULL DEFAULT '0',
+        `meta_data` longtext,
+        `tvc_product_data` longtext,
+        `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (`id`)
+    )";
+
+
+    $also_available_table = $wpdb->prefix . 'woo_also_available_links';
+    $also_available_table_sql = "CREATE TABLE $also_available_table (
+        product_id BIGINT UNSIGNED NOT NULL,
+        related_product_id BIGINT UNSIGNED NOT NULL,
+        PRIMARY KEY (product_id, related_product_id),
+        KEY related_product_id (related_product_id)
+    )";
 
 
     // Run dbDelta on each table SQL
@@ -87,6 +111,8 @@ function tvc_plugin_create_tables()
     dbDelta($sql4);
     dbDelta($sql5);
     dbDelta($sql6);
+    dbDelta($sql_product_sync_log);
+    dbDelta($also_available_table_sql);
 
     // Save the db version so you can do incremental migrations later
     update_option('tvc_plugin_db_version', '1.0');

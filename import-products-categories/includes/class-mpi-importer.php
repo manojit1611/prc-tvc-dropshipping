@@ -171,31 +171,29 @@ class MPI_Importer
      * @return true
      * Update Product Details
      */
-    function ww_update_detail_of_products($products, $batch_name = null, $filters = [])
+    function ww_update_detail_of_products($products, $import_batch_id , $filters = [])
     {
-        $success_count = 0;
-        $failure_count = 0;
-        $stage = 'Scheduled';
-        $invalid_records = [];
-        $successfully_processed = [];
-
+        // $p is tvc api data
         foreach ($products['ProductItemNoList'] as $p) {
             try {
-                $stage = 'Processing';
                 $sku = $p['ItemNo'];
+
+                //  Initially do product state empty
+                $this->syncProductState = array();
 
                 // $body = $this->ww_tvc_get_products_by_sku($sku);
                 $body = $this->ww_tvc_get_products_by_sku_new_version($sku);
                 $response = json_decode($body, true);
 
+                // Punch Log for individual Product
+                ww_tvc_log_insert_product_sync($import_batch_id, $sku, 0, null, $response);
+
                 // Safely get 'Applicables'
                 if (isset($response['Spu']['Items']) && is_array($response['Spu']['Items'])) {
                     $model_list = $response['Spu']['Items'];
                 } else {
-                    // add_import_error_log($batch_id, $tvc_product_data, 'Empty Model List', 'product');
                     $model_list = [];
                 }
-
                 $tvc_product_data = $response;
 
                 if (isset($tvc_product_data['Code']) && $tvc_product_data['Code'] == 404) {
@@ -209,47 +207,36 @@ class MPI_Importer
                     $checkCategory = category_exists_by_code($tvc_product_data['CatalogCode']);
                     if (!$checkCategory) {
                         $invalid_records[] = ['Category Code does not exist ' . $tvc_product_data['CatalogCode'] => $sku];
-                        // my_log_error('Category Code does not exist' . $tvc_product_data['CategoryCode']);
                         continue;
                     }
                 }
 
+                // save base details
                 $product_id = $this->save_update_products($tvc_product_data, $sku);
 
+                // get updated woo product details
                 $product = wc_get_product($product_id);
-
+                // update tvc product details
                 $this->update_tvc_products($p, $product_id, $tvc_product_data);
-
                 // $this->update_additional_info($product_id, $tvc_product_data, $product, $model_list, $sku);
                 $this->update_additional_info($tvc_product_data, $product, $model_list, $sku);
 
+                // Update product states
                 $productState = json_encode($this->syncProductState);
                 update_post_meta($product_id, 'tvc_sync_log', $productState);
 
-                $successfully_processed[] = $sku;
-                $success_count++;
-                $stage = 'Completed';
+                // Update Product Status
+                tvc_sync_log($sku . ' product updated successfully in batch ' . $import_batch_id, 'product');
+                ww_tvc_log_update_product_sync($import_batch_id, $sku, 1, array('sync_state' => $this->syncProductState));
+                ww_tvc_log_increment_total_success($import_batch_id); // in increment in batch table
+
             } catch (Exception $e) {
-                $failure_count++;
-                $stage = 'Failed';
-                $failedSku[] = $sku;
+                // keep the product failed with state updated
+                tvc_sync_log($sku . ' product failed to update in batch ' . $import_batch_id . ' due to ' . $e->getMessage(), 'product');
+                ww_tvc_log_update_product_sync($import_batch_id, $sku, 0, array('sync_state' => $this->syncProductState));
+                ww_tvc_log_increment_total_failed($import_batch_id);
             }
         }
-
-        $failedSku = implode(',', $failedSku ?? []);
-        $state = [
-            'success' => $success_count,
-            'failed' => $failure_count,
-            'total_processed' => $success_count + $failure_count,
-            'stage' => $stage,
-            'invalid_records' => $invalid_records,
-            'lastProductId' => $p['ProductId'] ?? null,
-            'failed_records' => $failedSku,
-            'filters' => $filters,
-        ];
-
-        add_import_error_log($batch_name, $filters['import_batch_id'], json_encode($state), json_encode($successfully_processed), 'product');
-
         return true;
     }
 
@@ -1077,7 +1064,7 @@ class MPI_Importer
                         $itemNo[] = $modelSku;
                     }
 
-                    // if ($index == 0) continue;
+                    if ($index == 0) continue;
 
                     $product_id_by_sku = wc_get_product_id_by_sku($modelSku);
                     if ($product_id_by_sku) {

@@ -1,18 +1,6 @@
 <?php
 
-add_action('admin_menu', 'my_wc_reset_menu');
-function my_wc_reset_menu() {
-    add_submenu_page(
-        'woocommerce',
-        'Reset WooCommerce',
-        'Reset WooCommerce',
-        'manage_options',
-        'reset-woocommerce',
-        'my_wc_reset_page'
-    );
-}
-
-function my_wc_reset_page() {
+function ww_tvc_wc_reset_page() {
     if (isset($_POST['wc_reset_confirm'])) {
         my_wc_reset_all_data();
         echo '<div class="updated"><p>✅ WooCommerce data has been reset.</p></div>';
@@ -85,7 +73,11 @@ function my_wc_reset_all_data() {
         "{$wpdb->prefix}tvc_manufacturer_product_relation",
         "{$wpdb->prefix}tvc_manufacturer_relation",
         "{$wpdb->prefix}tvc_products_data",
-        "{$wpdb->prefix}tvc_product_bulk_pricing"
+        "{$wpdb->prefix}tvc_product_bulk_pricing",
+        "{$wpdb->prefix}tvc_product_sync_logs",
+        "{$wpdb->prefix}tvc_import_batches",
+        "{$wpdb->prefix}tvc_import_logs",
+
     ];
     foreach ($tables as $table) {
         if ($wpdb->get_var("SHOW TABLES LIKE '{$table}'") == $table) {

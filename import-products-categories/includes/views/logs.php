@@ -64,12 +64,7 @@ function ww_restart_product_batch($batch_id, $batch_name)
             $filters = $status['filters'];
         }
     }
-
-    start_import_batch($batch_name, $batch_id);
-
     $filters['import_batch_id'] = $batch_id;
-    // $batch_name = 'latest_products';
-
     as_schedule_single_action(
         time(),
         'ww_import_product_batch',
@@ -82,7 +77,6 @@ function ww_restart_product_batch($batch_id, $batch_name)
 function ww_clear_all_product_batches($batch_id, $batch_name)
 {
     global $wpdb;
-
     $wpdb->query(
         $wpdb->prepare(
             "DELETE FROM {$wpdb->prefix}actionscheduler_actions 
@@ -90,24 +84,21 @@ function ww_clear_all_product_batches($batch_id, $batch_name)
             '%' . $wpdb->esc_like($batch_id) . '%'
         )
     );
-
-    start_import_batch($batch_name, $batch_id, 'Stopped');
-
-    // wp_clear_scheduled_hook('ww_import_product_batch');
-    tvc_sync_log("Cleared all scheduled product import jobs.", 'product');
+    // Mark as cancel
+    ww_tvc_log_update_batch_status($batch_id, ww_tvc_batch_cancel_status_flag());
 }
 
 
 if (!$current_batch) {
-?>
+    ?>
     <?php
     global $wpdb;
 
-    $logs_table    = $wpdb->prefix . 'tvc_import_logs';
+    $logs_table = $wpdb->prefix . 'tvc_import_logs';
     $batches_table = $wpdb->prefix . 'tvc_import_batches';
 
     // Pagination setup
-    $per_page  = 10;
+    $per_page = 10;
     $current_page = isset($_GET['paged']) ? max(1, intval($_GET['paged'])) : 1;
     $offset = ($current_page - 1) * $per_page;
 
@@ -130,78 +121,79 @@ if (!$current_batch) {
 
         <table class="widefat fixed striped">
             <thead>
-                <tr>
-                    <th>Date</th>
-                    <th>Batch ID</th>
-                    <th>Total Success</th>
-                    <th>Total Failed</th>
-                    <th>Status</th>
-                    <th>View Logs</th>
-                    <th>Actions</th>
-                </tr>
+            <tr>
+                <th>Date</th>
+                <th>Batch ID</th>
+                <th>Total Success</th>
+                <th>Total Failed</th>
+                <th>Status</th>
+                <th>View Logs</th>
+                <th>Actions</th>
+            </tr>
             </thead>
             <tbody>
-                <?php if (!empty($batches)) :
-                    foreach ($batches as $batch) :
-                ?>
-                        <tr>
-                            <td><?php echo esc_html(date('Y-m-d H:i', strtotime($batch->created_at))); ?></td>
-                            <td><?php echo esc_html($batch->batch_id); ?></td>
-                            <td><?php echo esc_html($batch->total_success); ?></td>
-                            <td><?php echo esc_html($batch->total_failed); ?></td>
-                            <td><?php echo esc_html($batch->status); ?></td>
-                            <td>
-                                <a href="<?php echo esc_url(admin_url('admin.php?page=tvc-logs&import_id=' . $batch->id)); ?>" class="button button-small">
-                                    View Logs
-                                </a>
-                            </td>
-                            <td>
-                                <?php
-                                $delete_url = wp_nonce_url(
-                                    add_query_arg([
-                                        'page' => 'tvc-logs',
-                                        'delete_batch' => $batch->id
-                                    ]),
-                                    'delete_batch_' . $batch->id
-                                );
-
-                                $stop_url = wp_nonce_url(
-                                    add_query_arg([
-                                        'page' => 'tvc-logs',
-                                        'stop_batch' => $batch->id,
-                                        'batch_name' => $batch->batch_id,
-                                    ]),
-                                    'stop_batch_' . $batch->id
-                                );
-
-                                $restart_url = wp_nonce_url(
-                                    add_query_arg([
-                                        'page' => 'tvc-logs',
-                                        'restart_batch' => $batch->id,
-                                        'batch_name' => $batch->batch_id,
-                                    ]),
-                                    'restart_batch_' . $batch->id,
-                                );
-                                ?>
-                                <a href="<?php echo esc_url($stop_url); ?>"
-                                    class="button button-small button-danger"
-                                    onclick="return confirm('Are you sure you want to Stop this batch');">Stop</a>
-
-                                <a href="<?php echo esc_url($restart_url); ?>"
-                                    class="button button-small button-danger"
-                                    onclick="return confirm('Are you sure you want to restart this batch');">Start/Restart</a>
-
-                                <a href="<?php echo esc_url($delete_url); ?>"
-                                    class="button button-small button-danger"
-                                    onclick="return confirm('Are you sure you want to delete this batch and all related logs?');">Delete</a>
-                            </td>
-                        </tr>
-                    <?php endforeach;
-                else : ?>
+            <?php if (!empty($batches)) :
+                foreach ($batches as $batch) :
+                    ?>
                     <tr>
-                        <td colspan="5">No batches found.</td>
+                        <td><?php echo esc_html(date('Y-m-d H:i', strtotime($batch->created_at))); ?></td>
+                        <td><?php echo esc_html($batch->batch_id); ?></td>
+                        <td><?php echo esc_html($batch->total_success); ?></td>
+                        <td><?php echo esc_html($batch->total_failed); ?></td>
+                        <td><?php echo esc_html($batch->status); ?></td>
+                        <td>
+                            <a href="<?php echo esc_url(admin_url('admin.php?page=tvc-logs&import_id=' . $batch->id)); ?>"
+                               class="button button-small">
+                                View Logs
+                            </a>
+                        </td>
+                        <td>
+                            <?php
+                            $delete_url = wp_nonce_url(
+                                add_query_arg([
+                                    'page' => 'tvc-logs',
+                                    'delete_batch' => $batch->id
+                                ]),
+                                'delete_batch_' . $batch->id
+                            );
+
+                            $stop_url = wp_nonce_url(
+                                add_query_arg([
+                                    'page' => 'tvc-logs',
+                                    'stop_batch' => $batch->id,
+                                    'batch_name' => $batch->batch_id,
+                                ]),
+                                'stop_batch_' . $batch->id
+                            );
+
+                            $restart_url = wp_nonce_url(
+                                add_query_arg([
+                                    'page' => 'tvc-logs',
+                                    'restart_batch' => $batch->id,
+                                    'batch_name' => $batch->batch_id,
+                                ]),
+                                'restart_batch_' . $batch->id,
+                            );
+                            ?>
+                            <a href="<?php echo esc_url($stop_url); ?>"
+                               class="button button-small button-danger"
+                               onclick="return confirm('Are you sure you want to Stop this batch');">Stop</a>
+
+                            <a href="<?php echo esc_url($restart_url); ?>"
+                               class="button button-small button-danger"
+                               onclick="return confirm('Are you sure you want to restart this batch');">Start/Restart</a>
+
+                            <a href="<?php echo esc_url($delete_url); ?>"
+                               class="button button-small button-danger"
+                               onclick="return confirm('Are you sure you want to delete this batch and all related logs?');">Delete</a>
+                        </td>
                     </tr>
-                <?php endif; ?>
+                <?php endforeach;
+            else : ?>
+                <tr>
+                    <td colspan="5">No batches found.</td>
+                </tr>
+            <?php endif; ?>
             </tbody>
         </table>
 
@@ -228,7 +220,7 @@ if (!$current_batch) {
             </div>
         <?php endif; ?>
     </div>
-<?php
+    <?php
 }
 
 ?>
