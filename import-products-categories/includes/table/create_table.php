@@ -55,29 +55,31 @@ function tvc_plugin_create_tables()
     ) $charset_collate;";
 
     // Table 5: Import Logs
-    $table5 = $wpdb->prefix . 'tvc_import_logs';
-    $sql5 = "CREATE TABLE $table5 (
-        id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
-        import_batch_id INT Null,
-        status LONGTEXT NULL,
-        success_skus LONGTEXT NULL,
-        type VARCHAR(100) NULL,
-        failed_sku LONGTEXT NULL,
-        PRIMARY KEY (id)
-    ) $charset_collate;";
+    // $table5 = $wpdb->prefix . 'tvc_import_logs';
+    // $sql5 = "CREATE TABLE $table5 (
+    //     id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+    //     import_batch_id INT Null,
+    //     status LONGTEXT NULL,
+    //     success_skus LONGTEXT NULL,
+    //     type VARCHAR(100) NULL,
+    //     failed_sku LONGTEXT NULL,
+    //     PRIMARY KEY (id)
+    // ) $charset_collate;";
 
 
     // Table 6: Import Batches
-    $sql6 = "CREATE TABLE ".$wpdb->prefix . 'tvc_import_batches'." (
+    $sql6 = "CREATE TABLE " . $wpdb->prefix . "tvc_import_batches" . " (
         id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
         batch_id LONGTEXT NULL,
         total_success INT NULL,
         total_failed INT NULL,
-        status varchar(12) NULL,
-        sync_type TINYINT default 0,
+        status VARCHAR(12) NULL,
+        sync_type TINYINT DEFAULT 0,
+        current_args JSON NULL,
         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (id)
     );";
+
 
 
     // Individual product sync log
@@ -109,7 +111,7 @@ function tvc_plugin_create_tables()
     dbDelta($sql2);
     dbDelta($sql3);
     dbDelta($sql4);
-    dbDelta($sql5);
+    // dbDelta($sql5);
     dbDelta($sql6);
     dbDelta($sql_product_sync_log);
     dbDelta($also_available_table_sql);

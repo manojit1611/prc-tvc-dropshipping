@@ -3,9 +3,11 @@ jQuery(document).ready(function ($) {
   $(document).on("change", ".importer select", function () {
     let slug = $(this).val();
     let container = $("#child-category-container");
-    // Remove all next dropdowns after this one
+
     $(this).nextAll("select").remove();
-    // container.find('select').not(this).remove();
+    if (!slug) {
+      container.find(".select2").last().remove();
+    }
 
     if ($(this).attr("id") === "parent_category") {
       container.empty(); // Clear previous dropdowns
@@ -78,9 +80,12 @@ jQuery(document).on(
     let formEl = jQuery("#mpi-tvc-category-form");
     let slug = jQuery(this).val();
     let child_containerEl = formEl.find("#child-category-container");
-    // Remove all selecting after this one and clear the child container
+
     jQuery(this).nextAll("select").remove();
-    // if parent then empty all childs
+    if (!slug) {
+      child_containerEl.find(".select2").last().remove();
+    }
+
     if (is_parent) {
       child_containerEl.empty();
     }

@@ -60,24 +60,35 @@ function ww_restart_product_batch($batch_id, $batch_name)
 {
     global $wpdb;
 
-    $row = $wpdb->get_row(
+    $wpdb->query(
         $wpdb->prepare(
-            "SELECT current_args 
-            FROM {$wpdb->prefix}tvc_import_batches 
-            WHERE id = %d",
-            $batch_id
+            "UPDATE {$wpdb->prefix}actionscheduler_actions 
+            SET status = %s 
+            WHERE args LIKE %s",
+            'pending',
+            '%' . $wpdb->esc_like($batch_name) . '%'
         )
     );
 
-    if ($row) {
-        $args = json_decode($row->current_args, true);
-    }
 
-    as_schedule_single_action(
-        time(),
-        'ww_import_product_batch',
-        [$batch_name, $args]
-    );
+    // $row = $wpdb->get_row(
+    //     $wpdb->prepare(
+    //         "SELECT current_args 
+    //         FROM {$wpdb->prefix}tvc_import_batches 
+    //         WHERE id = %d",
+    //         $batch_id
+    //     )
+    // );
+
+    // if ($row) {
+    //     $args = json_decode($row->current_args, true);
+    // }
+
+    // as_schedule_single_action(
+    //     time(),
+    //     'ww_import_product_batch',
+    //     [$batch_name, $args]
+    // );
 
     ww_tvc_log_update_batch_status($batch_id, ww_tvc_batch_running_status_flag());
 
@@ -243,7 +254,7 @@ if (!$current_batch) {
                     <?php endforeach;
                 else : ?>
                     <tr>
-                        <td colspan="5">No batches found.</td>
+                        <td colspan="8">No batches found.</td>
                     </tr>
                 <?php endif; ?>
             </tbody>

@@ -62,20 +62,40 @@ function ww_admin_category_pricing_page()
 
     // Save form
     if (isset($_POST['ww_save']) && check_admin_referer('ww_save_action', 'ww_nonce')) {
-        $id = isset($_POST['ww_rule_id']) ? intval($_POST['ww_rule_id']) : null;
+        $id  = isset($_POST['ww_rule_id']) ? intval($_POST['ww_rule_id']) : null;
         $cat = intval($_POST['ww_category']); // final selected category
 
         $new_rule = [
-            'cat' => $cat,
-            'type' => sanitize_key($_POST['ww_markup_type'] ?? 'percent'),
+            'cat'   => $cat,
+            'type'  => sanitize_key($_POST['ww_markup_type'] ?? 'percent'),
             'value' => floatval($_POST['ww_value'] ?? 0),
-            'ship' => floatval($_POST['ww_ship'] ?? 0)
+            'ship'  => floatval($_POST['ww_ship'] ?? 0)
         ];
-        if (is_null($id)) $rules[] = $new_rule;
-        else $rules[$id] = $new_rule;
+
+        // Get existing rules (default empty array if none)
+        $rules = get_option('ww_rules', []);
+
+        // ✅ Check if this category already exists
+        $existing_index = null;
+        foreach ($rules as $index => $rule) {
+            if (isset($rule['cat']) && $rule['cat'] === $cat) {
+                $existing_index = $index;
+                break;
+            }
+        }
+
+        // ✅ If found, update; else add new
+        if (!is_null($existing_index)) {
+            $rules[$existing_index] = $new_rule;
+        } else {
+            $rules[] = $new_rule;
+        }
+
         update_option('ww_rules', $rules);
-        echo '<div class="updated"><p>Rule saved.</p></div>';
+
+        echo '<div class="updated"><p>Rule saved successfully.</p></div>';
     }
+
 
     // Delete
     if (isset($_GET['delete']) && check_admin_referer('ww_delete_rule', 'ww_nonce')) {
@@ -168,7 +188,7 @@ function ww_admin_category_pricing_page()
 
             <div id="ww_category_selects" class="ww-field">
                 <label for="ww_category" class="ww-label">Category</label>
-                <select name="ww_category[]" class="ww-category-select" data-level="0">
+                <select name="ww_category[]" class="ww-category-select" id='parent_category' data-level="0">
                     <option value="">— Select Parent —</option>
                     <?php foreach ($parents as $p) {
                         if ($p->name == 'Uncategorized') continue;
@@ -177,6 +197,8 @@ function ww_admin_category_pricing_page()
                     ?>
                 </select>
             </div>
+
+            <div id='child_categories'></div>
 
             <input type="hidden" name="ww_category" id="ww_category">
 
@@ -198,6 +220,19 @@ function ww_admin_category_pricing_page()
             </div>
         </form>
 
+        <?php
+        // --- Pagination setup ---
+        $per_page = 50; // Number of rules per page
+        $total_rules = count($rules);
+        $total_pages = ceil($total_rules / $per_page);
+
+        // Get current page (default = 1)
+        $current_page = isset($_GET['paged']) ? max(1, intval($_GET['paged'])) : 1;
+
+        // Slice the rules array to show only current page items
+        $offset = ($current_page - 1) * $per_page;
+        $paged_rules = array_slice($rules, $offset, $per_page);
+        ?>
 
         <h2>All Rules</h2>
         <table class="widefat">
@@ -210,21 +245,45 @@ function ww_admin_category_pricing_page()
                 </tr>
             </thead>
             <tbody>
-                <?php if (empty($rules)) echo '<tr><td colspan="5">No rules</td></tr>';
-                else foreach ($rules as $i => $r) {
-                    $term = get_term($r['cat'], 'product_cat');
-                    $cat_name = $term ? $term->name : '—';
-                    echo "<tr>
-                    <td>{$cat_name}</td>
-                    <td>{$r['type']}</td>
-                    <td>{$r['value']}</td>
-                    <td>
-                        <a href='" . wp_nonce_url(admin_url('admin.php?page=ww-category-pricing&delete=' . $i), 'ww_delete_rule', 'ww_nonce') . "' class='ww-delete'>Delete</a>
-                    </td>
-                </tr>";
-                } ?>
+                <?php if (empty($paged_rules)): ?>
+                    <tr>
+                        <td colspan="5">No rules</td>
+                    </tr>
+                <?php else: ?>
+                    <?php foreach ($paged_rules as $i => $r): ?>
+                        <?php
+                        $term = get_term($r['cat'], 'product_cat');
+                        $cat_name = $term ? esc_html($term->name) : '—';
+                        ?>
+                        <tr>
+                            <td><?= $cat_name; ?></td>
+                            <td><?= esc_html($r['type']); ?></td>
+                            <td><?= esc_html($r['value']); ?></td>
+                            <td>
+                                <a href="<?= esc_url(wp_nonce_url(admin_url('admin.php?page=ww-category-pricing&delete=' . ($offset + $i)), 'ww_delete_rule', 'ww_nonce')); ?>" class="ww-delete">Delete</a>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                <?php endif; ?>
             </tbody>
         </table>
+
+        <?php if ($total_pages > 1): ?>
+            <div class="tablenav">
+                <div class="tablenav-pages">
+                    <?php
+                    echo paginate_links([
+                        'base'      => add_query_arg('paged', '%#%'),
+                        'format'    => '',
+                        'prev_text' => __('« Previous'),
+                        'next_text' => __('Next »'),
+                        'total'     => $total_pages,
+                        'current'   => $current_page,
+                    ]);
+                    ?>
+                </div>
+            </div>
+        <?php endif; ?>
     </div>
 
     <script>
@@ -237,8 +296,13 @@ function ww_admin_category_pricing_page()
                 let val = $current.val();
                 $("#ww_category").val(val);
 
-                // Remove all lower-level selects to prevent duplicates
-                $current.nextAll(".ww-category-select").remove();
+                if ($(this).data('level') == 0) {
+                    $("#child_categories").empty();
+                }
+
+                if (!val && $(this).data('level') == 1) {
+                    $("#child_categories").find(".select2").last().remove();
+                }
 
                 if (val) {
                     // Fetch children dynamically
@@ -253,12 +317,12 @@ function ww_admin_category_pricing_page()
                                 sel.append($("<option>").val(t.term_id).text(t.name));
                             });
 
-                            let container = $("#ww_category_selects");
+                            let container = $("#child_categories");
 
                             let existingSelects = container.find(".select2").length;
-                            if (existingSelects < 3) {
+                            if (existingSelects < 2) {
                                 container.append(sel);
-                            } else if (existingSelects === 3) {
+                            } else if (existingSelects === 2) {
                                 container.find(".select2").last().remove();
                                 container.append(sel);
                             }
@@ -274,8 +338,6 @@ function ww_admin_category_pricing_page()
                 e.preventDefault();
                 if (confirm("Delete this rule?")) location.href = $(this).attr("href");
             });
-
-
             // Expose rules to JS
             var ww_rules = <?php echo json_encode(array_values($rules)); ?>;
         });
