@@ -1,7 +1,6 @@
 <?php
 global $wpdb;
 $batches_table = $wpdb->prefix . 'tvc_import_batches';
-// $logs_table = $wpdb->prefix . 'tvc_import_logs';
 $sync_logs_table = $wpdb->prefix . 'tvc_product_sync_logs';
 
 $batches = $wpdb->get_results("SELECT batch_id, created_at, total_success, total_failed FROM $batches_table ORDER BY created_at DESC");
@@ -120,8 +119,6 @@ function ww_cancel_product_batches($batch_id, $batch_name)
 if (!$current_batch) {
 ?>
     <?php
-    global $wpdb;
-
     $logs_table = $wpdb->prefix . 'tvc_import_logs';
     $batches_table = $wpdb->prefix . 'tvc_import_batches';
 
@@ -130,21 +127,52 @@ if (!$current_batch) {
     $current_page = isset($_GET['paged']) ? max(1, intval($_GET['paged'])) : 1;
     $offset = ($current_page - 1) * $per_page;
 
-    // Get total number of batches
-    $total_batches = $wpdb->get_var("SELECT COUNT(*) FROM $batches_table");
+    // Get selected status filter
+    $status_filter = isset($_GET['status']) ? sanitize_text_field($_GET['status']) : '';
 
-    // Fetch batches for current page
+    // Base query
+    $where = '1=1';
+    $params = [];
+
+    if ($status_filter !== '') {
+        $where .= ' AND status = %d';
+        $params[] = $status_filter;
+    }
+
+    // Get total count (for pagination)
+    $total_batches = $wpdb->get_var($wpdb->prepare(
+        "SELECT COUNT(*) FROM $batches_table WHERE $where",
+        ...$params
+    ));
+
+    // Fetch paginated results
+    $params[] = $per_page;
+    $params[] = $offset;
+
     $batches = $wpdb->get_results($wpdb->prepare(
-        "SELECT * FROM $batches_table ORDER BY created_at DESC LIMIT %d OFFSET %d",
-        $per_page,
-        $offset
+        "SELECT * FROM $batches_table WHERE $where ORDER BY created_at DESC LIMIT %d OFFSET %d",
+        ...$params
     ));
 
     $total_pages = ceil($total_batches / $per_page);
     ?>
 
     <div class="wrap">
-        <h1 class="wp-heading-inline">📦 Import Logs Summary</h1>
+        <div style='display:flex; justify-content: space-between;'>
+            <h1 class="wp-heading-inline">📦 Import Logs Summary</h1>
+
+            <form method="get">
+                <input type="hidden" name="page" value="tvc-logs">
+                <select name="status" style="margin-bottom: 10px;" onchange="this.form.submit()">
+                    <option value="">All</option>
+                    <option value="<?php echo ww_tvc_batch_running_status_flag(); ?>" <?php selected($status_filter, ww_tvc_batch_running_status_flag()); ?>>Running</option>
+                    <option value="<?php echo ww_tvc_batch_pending_status_flag(); ?>" <?php selected($status_filter, ww_tvc_batch_pending_status_flag()); ?>>Pending</option>
+                    <option value="<?php echo ww_tvc_batch_complete_status_flag(); ?>" <?php selected($status_filter, ww_tvc_batch_complete_status_flag()); ?>>Completed</option>
+                    <option value="<?php echo ww_tvc_batch_cancel_status_flag(); ?>" <?php selected($status_filter, ww_tvc_batch_cancel_status_flag()); ?>>Cancelled</option>
+                </select>
+            </form>
+        </div>
+
         <hr class="wp-header-end">
 
         <table class="widefat fixed striped">
@@ -328,10 +356,17 @@ if ($current_batch) {
     $current_page = isset($_GET['paged_logs']) ? max(1, intval($_GET['paged_logs'])) : 1;
     $offset = ($current_page - 1) * $per_page;
 
-    $total_logs = $wpdb->get_var($wpdb->prepare(
-        "SELECT batch_id FROM $logs_table WHERE batch_id = %s",
-        $current_batch
-    ));
+    $batch_details = $wpdb->get_row(
+        $wpdb->prepare(
+            "SELECT batch_id, total_success, total_failed 
+			FROM $batches_table 
+			WHERE id = %d",
+            $current_batch
+        )
+    );
+
+    // 	print_r($batch_details);
+    // 	die;
 
     // Total logs count
     $total_logs = $wpdb->get_var($wpdb->prepare(
@@ -347,10 +382,10 @@ if ($current_batch) {
         $offset
     ));
 
-    echo "<h4>Logs for Batch ID: " . esc_html($batches[0]->batch_id) . "</h4>";
+    echo "<h4>Logs for Batch ID: " . esc_html($batch_details->batch_id) . "</h4>";
 
-    echo "<span><strong>Total Success</strong></span>: " . esc_html($batches[0]->total_success) . "</br>";
-    echo "<span><strong>Total Failed</strong><span>: " . esc_html($batches[0]->total_failed) . "</br></br>";
+    echo "<span><strong>Total Success</strong></span>: " . esc_html($batch_details->total_success) . "</br>";
+    echo "<span><strong>Total Failed</strong><span>: " . esc_html($batch_details->total_failed) . "</br></br>";
 
     if (!empty($logs)) {
         echo '<table class="widefat fixed striped" style="width:98%;">';
@@ -370,14 +405,14 @@ if ($current_batch) {
                 case 1:
                     echo "Success";
                     break;
-                case 2:
+                case 0:
                     echo "Failed";
                     break;
             }
             echo '</td>';
 
             echo "<td>";
-            if ($log->status == 2) {
+            if (!$log->status) {
                 echo "<button id='update_btn' data-sku=" . esc_html($log->tvc_sku) . " class='button button-primary'>Update</button>";
             } else {
                 echo "N/A";

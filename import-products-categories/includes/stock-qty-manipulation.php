@@ -1,6 +1,6 @@
 <?php
 
-add_filter('woocommerce_product_stock_status_options', function($status_options) {
+add_filter('woocommerce_product_stock_status_options', function ($status_options) {
     $status_options['on_sale'] = __('On Sale', 'woocommerce');
     $status_options['in_shortage'] = __('In Shortage', 'woocommerce');
     $status_options['5_7_days'] = __('5-7 Days', 'woocommerce');
@@ -21,8 +21,9 @@ add_filter('woocommerce_product_stock_status_options', function($status_options)
 
 // Add custom field for Minimum Order Qty in the product backend
 add_action('woocommerce_product_options_inventory_product_data', 'add_min_order_qty_field');
-function add_min_order_qty_field() {
-    woocommerce_wp_text_input( array(
+function add_min_order_qty_field()
+{
+    woocommerce_wp_text_input(array(
         'id' => '_min_order_qty',
         'label' => __('Minimum Order Quantity', 'woocommerce'),
         'type' => 'number',
@@ -33,7 +34,8 @@ function add_min_order_qty_field() {
 }
 
 add_action('woocommerce_process_product_meta', 'save_min_order_qty_field');
-function save_min_order_qty_field($post_id) {
+function save_min_order_qty_field($post_id)
+{
     $min_qty = isset($_POST['_min_order_qty']) ? absint($_POST['_min_order_qty']) : '';
     update_post_meta($post_id, '_min_order_qty', $min_qty);
 }
@@ -41,12 +43,13 @@ function save_min_order_qty_field($post_id) {
 // Validate & enforce minimum quantity before adding to cart
 add_filter('woocommerce_add_to_cart_validation', 'enforce_minimum_order_quantity', 10, 3);
 
-function enforce_minimum_order_quantity($passed, $product_id, $quantity) {
+function enforce_minimum_order_quantity($passed, $product_id, $quantity)
+{
     $min_qty = get_post_meta($product_id, '_min_order_qty', true);
 
     if (!empty($min_qty) && $quantity < $min_qty) {
         // Show error message
-        wc_add_notice(sprintf(__('The minimum quantity for %s is %d.', 'woocommerce'), get_the_title($product_id), $min_qty), 'error');
+        wc_add_notice(sprintf(__('Minimum quantity is %d.', 'woocommerce'), $min_qty), 'error');
 
         // Block adding to cart
         return false;

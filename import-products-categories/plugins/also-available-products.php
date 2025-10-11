@@ -39,16 +39,16 @@ function aap_admin_product_field()
     $related_ids = $wpdb->get_col($wpdb->prepare("SELECT related_product_id FROM $table WHERE product_id = %d", $product_id));
 
     echo '<div class="options_group">';
-    ?>
+?>
     <p class="form-field">
         <label for="also_available_products"><?php _e('Also Available (Products)', 'woocommerce'); ?></label>
         <select class="wc-product-search"
-                multiple="multiple"
-                style="width: 100%;"
-                id="also_available_products"
-                name="also_available_products[]"
-                data-placeholder="<?php esc_attr_e('Search for a product…', 'woocommerce'); ?>"
-                data-action="woocommerce_json_search_products_and_variations">
+            multiple="multiple"
+            style="width: 100%;"
+            id="also_available_products"
+            name="also_available_products[]"
+            data-placeholder="<?php esc_attr_e('Search for a product…', 'woocommerce'); ?>"
+            data-action="woocommerce_json_search_products_and_variations">
             <?php
             foreach ($related_ids as $related_id) {
                 $product = wc_get_product($related_id);
@@ -59,7 +59,7 @@ function aap_admin_product_field()
             ?>
         </select>
     </p>
-    <?php
+<?php
     echo '</div>';
 }
 
@@ -143,9 +143,8 @@ function aap_display_links_on_product_page()
         return;
     }
 
-    ?>
+?>
     <style>
-
         .ww-also-available-products h3 {
             color: #222;
             font-size: 14px;
@@ -162,7 +161,7 @@ function aap_display_links_on_product_page()
             padding: 0;
             gap: 8px;
             margin-bottom: var(--woo-sp-content-space, 1rem);
-            margin-top: calc(var(--woo-sp-content-space,1rem) / 2);
+            margin-top: calc(var(--woo-sp-content-space, 1rem) / 2);
         }
 
         .ww-also-available-products ul li a {
@@ -197,16 +196,25 @@ function aap_display_links_on_product_page()
         <h3><?php echo __('Same Model in Different Colors:'); ?></h3>
         <ul>
             <?php
+            $is_single = is_product();
+
             foreach ($finalAvailableProducts as $p) {
                 $rid = $p->get_id();
                 if ($p && $p->get_status() == 'publish') {
-                    echo '<li><a href="' . get_permalink($rid) . '">' . $p->get_image('woocommerce_thumbnail') . '</a></li>';
+                    if ($is_single) {
+                        // Single product page → normal link
+                        echo '<li><a href="' . get_permalink($rid) . '">' . $p->get_image('woocommerce_thumbnail') . '</a></li>';
+                    } else {
+                        // Shop/archive/product card → AJAX update
+                        echo '<li><a href="#" class="ww-change-product" data-product-id="' . esc_attr($rid) . '">'
+                            . $p->get_image('woocommerce_thumbnail') . '</a></li>';
+                    }
                 }
             }
             ?>
         </ul>
     </div>
-    <?php
+<?php
 }
 
 // Cleanup when product is deleted

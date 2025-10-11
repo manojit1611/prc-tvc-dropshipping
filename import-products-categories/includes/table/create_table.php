@@ -54,18 +54,6 @@ function tvc_plugin_create_tables()
         KEY term_id (term_id)
     ) $charset_collate;";
 
-    // Table 5: Import Logs
-    // $table5 = $wpdb->prefix . 'tvc_import_logs';
-    // $sql5 = "CREATE TABLE $table5 (
-    //     id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
-    //     import_batch_id INT Null,
-    //     status LONGTEXT NULL,
-    //     success_skus LONGTEXT NULL,
-    //     type VARCHAR(100) NULL,
-    //     failed_sku LONGTEXT NULL,
-    //     PRIMARY KEY (id)
-    // ) $charset_collate;";
-
 
     // Table 6: Import Batches
     $sql6 = "CREATE TABLE " . $wpdb->prefix . "tvc_import_batches" . " (
@@ -79,8 +67,6 @@ function tvc_plugin_create_tables()
         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (id)
     );";
-
-
 
     // Individual product sync log
     $tvc_product_sync_logs_table_name = $wpdb->prefix . 'tvc_product_sync_logs';

@@ -171,7 +171,7 @@ class MPI_Importer
      * @return true
      * Update Product Details
      */
-    function ww_update_detail_of_products($products, $import_batch_id , $filters = [])
+    function ww_update_detail_of_products($products, $import_batch_id, $filters = [])
     {
         // $p is tvc api data
         foreach ($products['ProductItemNoList'] as $p) {
@@ -206,6 +206,7 @@ class MPI_Importer
                 if (function_exists('category_exists_by_code')) {
                     $checkCategory = category_exists_by_code($tvc_product_data['CatalogCode']);
                     if (!$checkCategory) {
+                        tvc_sync_log('Category Code does not exist ' . $tvc_product_data['CatalogCode'] . 'for product: ' . $sku, 'tvc-product-category');
                         $invalid_records[] = ['Category Code does not exist ' . $tvc_product_data['CatalogCode'] => $sku];
                         continue;
                     }
@@ -217,7 +218,7 @@ class MPI_Importer
                 // get updated woo product details
                 $product = wc_get_product($product_id);
                 // update tvc product details
-                $this->update_tvc_products($p, $product_id, $tvc_product_data);
+                // $this->update_tvc_products($p, $product_id, $tvc_product_data);
                 // $this->update_additional_info($product_id, $tvc_product_data, $product, $model_list, $sku);
                 $this->update_additional_info($tvc_product_data, $product, $model_list, $sku);
 
@@ -252,7 +253,8 @@ class MPI_Importer
     {
         $product_id = $product->get_id();
 
-        // $this->update_tvc_bulk_pricing_table($product_id, $tvc_product_data);
+            // $this->update_tvc_bulk_pricing_table($product_id, $tvc_product_data);
+        $this->update_tvc_products($sku, $product_id, $tvc_product_data);
 
         $brandIds = $this->add_update_manufacturer($tvc_product_data, $product_id);
 
@@ -335,6 +337,9 @@ class MPI_Importer
                 wp_safe_redirect(add_query_arg($args, admin_url('edit.php')));
                 exit;
             }
+
+            $productState = json_encode($this->syncProductState);
+            update_post_meta($product_id, 'tvc_sync_log', $productState);
 
             wp_send_json_success([
                 'success' => true,
@@ -423,25 +428,16 @@ class MPI_Importer
      */
     function ww_ajax_product_fetch_date()
     {
-        $start_date = isset($_POST['start_date']) ? sanitize_text_field($_POST['start_date']) : '';
-        $end_date = isset($_POST['end_date']) ? sanitize_text_field($_POST['end_date']) : '';
-
-        $importer = new MPI_Importer();
-        $api = new MPI_API();
-
-        $lastProductId = null;
-        $maxPages = 1; // 
-        $pageIndex = 1; // Db offset
-        $perPage = 10;
-
-        // Current date/time in WP timezone
-        $current_time = current_time('timestamp');
+        $start_date = isset($_GET['start_date']) ? sanitize_text_field($_GET['start_date']) : '';
+        $end_date = isset($_GET['end_date']) ? sanitize_text_field($_GET['end_date']) : '';
 
         // Begin date = 15 minutes before now
         $beginDate = $start_date;
         $endDate = $end_date;
 
-        ww_start_product_import(null, $beginDate, $endDate);
+        ww_start_product_import(null, $beginDate, $endDate, array(
+            'import_batch_id' => "DATE_TIME_" . time()
+        ));
 
         wp_send_json_success([
             'success' => true,
@@ -579,7 +575,7 @@ class MPI_Importer
      * @return array
      * Update Products
      */
-    function update_tvc_products($data, $postId, $productData)
+    function update_tvc_products($sku, $postId, $productData)
     {
         global $wpdb;
         $table_name = $wpdb->prefix . 'tvc_products_data';
@@ -589,7 +585,7 @@ class MPI_Importer
 
         // prepare row
         $row = [
-            'tvc_product_id' => isset($data['ProductId']) ? (int)$data['ProductId'] : 0,
+            'tvc_product_id' => $sku,
             'post_id' => (int)$postId,
             'tvc_product' => json_encode($productData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
         ];
@@ -971,12 +967,21 @@ class MPI_Importer
                         ]);
                         $brand_ids[] = (int)$existing_term->term_id;
                     } else {
+                        // Create new term
+                        $new_term = wp_insert_term($brand_name, $brand_taxonomy, ['slug' => $brand_slug]);
+
+                        if (!is_wp_error($new_term) && isset($new_term['term_id'])) {
+                            $brand_ids[] = (int) $new_term['term_id'];
+                        } else {
+                            error_log('Failed to create brand term: ' . $brand_name);
+                        }
+
                         // Insert a new brand
-                        wp_insert_term(
-                            $brand_name,
-                            $brand_taxonomy,
-                            ['slug' => $brand_slug]
-                        );
+                        // wp_insert_term(
+                        //     $brand_name,
+                        //     $brand_taxonomy,
+                        //     ['slug' => $brand_slug]
+                        // );
                     }
 
                     if (!empty($brand_ids)) {

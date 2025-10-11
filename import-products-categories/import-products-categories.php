@@ -253,83 +253,6 @@ if (!function_exists('my_log_error')) {
     }
 }
 
-// Add admin menu page
-add_action('admin_menu', function () {
-    add_menu_page(
-        'Error Logs',         // Page title
-        'Error Logs',         // Menu title
-        'manage_options',     // Capability
-        'custom-error-logs',  // Menu slug
-        'render_error_logs',  // Callback function
-        'dashicons-warning',  // Icon
-        100                   // Position
-    );
-});
-
-// Render the error log contents
-function render_error_logs()
-{
-    // Path to wp-content/logs folder
-    $log_path = trailingslashit(WP_CONTENT_DIR) . 'logs/';
-
-    // Get all log files starting with tvc-sync-product-
-    $files = glob($log_path . 'tvc-sync-product-*.log');
-
-    echo '<div class="wrap"><h1>Error Logs</h1>';
-
-    if (!empty($files)) {
-        echo '<h2>Select a log file:</h2>';
-        echo '<form method="get">';
-        echo '<input type="hidden" name="page" value="custom-error-logs">';
-        echo '<select name="log_date">';
-        foreach ($files as $file) {
-            $filename = basename($file);
-            // Extract just the date part
-            $date = str_replace(array('tvc-sync-product-', '.log'), '', $filename);
-            $selected = (isset($_GET['log_date']) && $_GET['log_date'] === $date) ? 'selected' : '';
-            echo '<option value="' . esc_attr($date) . '" ' . $selected . '>' . esc_html($date) . '</option>';
-        }
-        echo '</select> ';
-        submit_button('View Log', 'primary', '', false);
-        echo '</form>';
-
-        // Display the selected log
-        if (isset($_GET['log_date']) && !empty($_GET['log_date'])) {
-            $selected_date = sanitize_text_field($_GET['log_date']);
-            $selected_file = $log_path . "tvc-sync-product-{$selected_date}.log";
-
-            if (file_exists($selected_file)) {
-                $logs = file_get_contents($selected_file);
-                echo '<h2>Logs for ' . esc_html($selected_date) . '</h2>';
-                echo '<pre style="background:#111;color:#0f0;padding:15px;max-height:600px;overflow:auto;border-radius:8px;">';
-                echo esc_html($logs);
-                echo '</pre>';
-
-                // Clear log button
-                echo '<form method="post" style="margin-top:20px;" onsubmit="return confirm(\'Are you sure you want to clear this log?\');">';
-                echo '<input type="hidden" name="log_date" value="' . esc_attr($selected_date) . '">';
-                submit_button('Clear Logs', 'delete', 'clear_logs');
-                echo '</form>';
-
-                // Handle clearing logs
-                if (isset($_POST['clear_logs']) && current_user_can('manage_options')) {
-                    $clear_date = sanitize_text_field($_POST['log_date']);
-                    $clear_file = $log_path . "tvc-sync-product-{$clear_date}.log";
-                    file_put_contents($clear_file, "");
-                    echo '<div class="updated notice"><p>Logs cleared successfully.</p></div>';
-                    echo '<script>window.location.reload();</script>';
-                }
-            } else {
-                echo '<p>No logs found for this date.</p>';
-            }
-        }
-    } else {
-        echo '<p>No log files found.</p>';
-    }
-
-    echo '</div>';
-}
-
 // Add a new column to the Products admin list
 add_filter('manage_edit-product_columns', 'ww_custom_product_list_column');
 function ww_custom_product_list_column($columns)
@@ -392,16 +315,16 @@ add_action('manage_product_posts_custom_column', function ($column, $post_id) {
 
 // 3. Add JavaScript to handle popup toggle
 add_action('admin_footer', function () {
-    ?>
+?>
     <script>
-        jQuery(document).ready(function ($) {
-            $('.show-log-popup').on('click', function (e) {
+        jQuery(document).ready(function($) {
+            $('.show-log-popup').on('click', function(e) {
                 e.preventDefault();
                 var target = $(this).data('target');
                 $(target).fadeIn();
             });
 
-            $(document).on('click', '.close-log-popup', function (e) {
+            $(document).on('click', '.close-log-popup', function(e) {
                 e.preventDefault();
                 $(this).closest('.log-popup').fadeOut();
             });
@@ -423,7 +346,7 @@ add_action('admin_footer', function () {
             min-width: 300px;
         }
     </style>
-    <?php
+<?php
 });
 
 // === Includes ===
@@ -432,12 +355,15 @@ require __DIR__ . '/plugins/ww-category-pricing.php';
 require __DIR__ . '/plugins/also-available-products.php';
 require __DIR__ . '/includes/views/automate-product-cat.php';
 require __DIR__ . '/includes/views/automate-products.php';
+
 require_once TVC_MPI_PLUGIN_PATH . 'includes/class-mpi-admin.php';
 require_once TVC_MPI_PLUGIN_PATH . 'includes/class-mpi-api.php';
 require_once TVC_MPI_PLUGIN_PATH . 'includes/class-mpi-importer.php';
 require_once TVC_MPI_PLUGIN_PATH . 'includes/helpers.php';
+
 require_once TVC_MPI_PLUGIN_PATH . 'includes/tvc-flush-wooocommerce.php';
-require_once TVC_MPI_PLUGIN_PATH . 'includes/tvc-product-manipulation.php';
+require_once TVC_MPI_PLUGIN_PATH . 'includes/tvc-order-manipulation.php';
+
 require_once TVC_MPI_PLUGIN_PATH . 'includes/api/get-products-by-date.php';
 require_once TVC_MPI_PLUGIN_PATH . 'includes/api/get-manufacturer-by-post.php';
 require_once TVC_MPI_PLUGIN_PATH . 'includes/api/get-model-by-post.php';
@@ -464,7 +390,7 @@ function ww_tvc_enqueue_select2_assets()
     // Init script
     wp_add_inline_script('select2-js', "
         jQuery(document).ready(function($) {
-            $('select.select2').select2();
+            $('.tvc_importer .select2').select2();
         });
     ");
 }
@@ -474,19 +400,202 @@ add_action('admin_enqueue_scripts', 'ww_tvc_enqueue_select2_assets');
 
 // Custom Actions
 add_action('init', function () {
-
     // Release Lock if current automation is running
     $tvc_auto_product_pull_running_clear = $_GET['tvc_auto_product_pull_running_clear'] ?? '';
     if ($tvc_auto_product_pull_running_clear) {
         update_option('tvc_auto_product_pull_running', false, false);
     }
     // Update Last Sync Time of automation
-//    $set_tvc_last_sync_time = $_GET['set_tvc_last_sync_time'] ?? '';
-//    if($set_tvc_last_sync_time){
-//        $endDate = date('Y-m-d\TH:i:s', $current_time);
-//        update_option('tvc_last_sync_time', $endDate, false);
-//    }
+    //    $set_tvc_last_sync_time = $_GET['set_tvc_last_sync_time'] ?? '';
+    //    if($set_tvc_last_sync_time){
+    //        $endDate = date('Y-m-d\TH:i:s', $current_time);
+    //        update_option('tvc_last_sync_time', $endDate, false);
+    //    }
 
 });
 
 register_activation_hook(__FILE__, 'tvc_plugin_create_tables');
+
+add_action('woocommerce_after_shop_loop_item_title', 'custom_section_above_add_to_cart', 15);
+function custom_section_above_add_to_cart()
+{
+    aap_display_links_on_product_page();
+}
+
+add_action('wp_ajax_ww_get_product_data', 'ww_get_product_data');
+add_action('wp_ajax_nopriv_ww_get_product_data', 'ww_get_product_data');
+function ww_get_product_data()
+{
+    if (!isset($_POST['product_id'])) {
+        wp_send_json_error(['message' => 'Missing product ID']);
+    }
+
+    $product_id = intval($_POST['product_id']);
+    $product = wc_get_product($product_id);
+
+    if (!$product) {
+        wp_send_json_error(['message' => 'Invalid product']);
+    }
+
+    ob_start();
+    echo $product->get_image('woocommerce_thumbnail');
+    $image_html = ob_get_clean();
+
+    // Get add to cart URL & classes
+    $add_to_cart_url = esc_url($product->add_to_cart_url());
+    $add_to_cart_classes = 'button add_to_cart_button ajax_add_to_cart';
+    if (!$product->is_purchasable() || !$product->is_in_stock()) {
+        $add_to_cart_classes .= ' disabled';
+    }
+
+    wp_send_json_success([
+        'id' => $product_id,
+        'title' => $product->get_name(),
+        'price' => $product->get_price_html(),
+        'image' => $image_html,
+        'add_to_cart_url' => $add_to_cart_url,
+        'add_to_cart_classes' => $add_to_cart_classes
+    ]);
+}
+
+
+add_action('wp_footer', 'ww_product_card_ajax_script');
+function ww_product_card_ajax_script()
+{
+?>
+    <script>
+        jQuery(document).ready(function($) {
+            $(document).on('click', '.ww-change-product', function(e) {
+                e.preventDefault();
+
+                var productId = $(this).data('product-id');
+                var card = $(this).closest('.product'); // WooCommerce product card
+
+                $.ajax({
+                    url: '<?php echo admin_url('admin-ajax.php'); ?>',
+                    type: 'POST',
+                    data: {
+                        action: 'ww_get_product_data',
+                        product_id: productId
+                    },
+                    beforeSend: function() {
+                        card.css('opacity', '0.5'); // loading effect
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            var data = response.data;
+
+                            // Update product image
+                            card.find('img')[0].srcset = $(data.image).attr('src');
+
+                            // console.log(card.find('img')[0].src);
+
+                            // Update product title
+                            card.find('.woocommerce-loop-product__title').text(data.title);
+
+                            // Update product price
+                            card.find('.price').html(data.price);
+
+                            // Update Add to Cart button
+                            var atcButton = card.find('.add_to_cart_button');
+                            atcButton.attr('href', data.add_to_cart_url);
+                            atcButton.attr('data-product_id', data.id);
+                            atcButton.attr('class', data.add_to_cart_classes);
+                        } else {
+                            alert(response.data.message);
+                        }
+                    },
+                    complete: function() {
+                        card.css('opacity', '1');
+                    }
+                });
+            });
+        });
+    </script>
+<?php
+}
+
+
+// add_action('woocommerce_new_order', 'ww_save_markup_amount_to_order_meta', 20, 2);
+function ww_save_markup_amount_to_order_meta($order_id, $order)
+{
+    $rules = get_option('ww_rules', []);
+    if (empty($rules)) return;
+
+    $total_markup = 0;
+    $order_total_before_markup = 0;
+
+    foreach ($order->get_items() as $item) {
+        $product = $item->get_product();
+        if (!$product) continue;
+
+        $price = $product->get_price();
+        $order_total_before_markup += $price * $item->get_quantity();
+
+        $product_cats = wc_get_product_term_ids($product->get_id(), 'product_cat');
+
+        foreach ($rules as $r) {
+            if (isset($r['cat']) && in_array((int)$r['cat'], $product_cats, true)) {
+                $val  = floatval($r['value']);
+                $ship = floatval($r['ship']);
+
+                // Calculate markup for this item
+                if ($r['type'] === 'percent') {
+                    $markup = ($price * ($val / 100)) * $item->get_quantity();
+                } else {
+                    $markup = $val * $item->get_quantity();
+                }
+
+                $markup += $ship * $item->get_quantity();
+                $total_markup += $markup;
+                break; // Only first matching rule per product
+            }
+        }
+    }
+
+    if ($total_markup > 0) {
+        $order->update_meta_data('_ww_markup_amount', $total_markup);
+    }
+
+    // Optional: also save original subtotal (for clarity)
+    $order->update_meta_data('_ww_original_subtotal', $order_total_before_markup);
+    $order->save();
+}
+
+
+add_action('woocommerce_checkout_create_order_line_item', 'ww_save_item_specific_markup', 20, 4);
+function ww_save_item_specific_markup($item, $cart_item_key, $values, $order)
+{
+    $rules = get_option('ww_rules', []);
+    if (empty($rules)) return;
+
+    $product = $item->get_product();
+    if (!$product) return;
+
+    $price = $product->get_price();
+    $product_cats = wc_get_product_term_ids($product->get_id(), 'product_cat');
+
+    $item_markup = 0;
+
+    foreach ($rules as $r) {
+        if (isset($r['cat']) && in_array((int)$r['cat'], $product_cats, true)) {
+            $val = floatval($r['value']);
+            $ship = floatval($r['ship']);
+
+            if ($r['type'] === 'percent') {
+                $markup = ($price * ($val / 100)) * $item->get_quantity();
+            } else {
+                $markup = $val * $item->get_quantity();
+            }
+
+            $markup += $ship * $item->get_quantity();
+            $item_markup += $markup;
+            break;
+        }
+    }
+
+    if ($item_markup > 0) {
+        // ✅ Save markup as item meta (specific to this product in the order)
+        $item->add_meta_data('_ww_item_markup', $item_markup, true);
+    }
+}

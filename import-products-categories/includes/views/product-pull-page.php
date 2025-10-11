@@ -29,9 +29,9 @@
         <form method="post" id="mpi-category-form">
             <?php wp_nonce_field('mpi_import_nonce'); ?>
 
-            <table class="form-table">
+            <table class="form-table tvc_importer">
                 <tbody>
-                <!-- <tr>
+                    <!-- <tr>
                     <th scope="row"><label for="sync_type">Sync Type</label></th>
                     <td>
                         <select required name="sync_type" id="sync_type" style="min-width: 250px;">
@@ -41,42 +41,44 @@
                         <p class="description">Choose whether to import products or just categories.</p>
                     </td>
                 </tr> -->
-                <input type="hidden" value="products" name="sync_type"/>
+                    <input type="hidden" value="products" name="sync_type" />
 
-                <tr>
-                    <th scope="row"><label for="parent_category">Parent Category</label></th>
-                    <td>
-                        <select required name="tvc_parent_category_code" class="select2" id="parent_category"
+                    <tr>
+                        <th scope="row"><label for="parent_category">Parent Category</label></th>
+                        <td>
+                            <select required name="tvc_parent_category_code" class="select2" id="parent_category"
                                 style="min-width: 250px;">
-                            <option value="">-- Select Parent Category --</option>
-                            <?php
-                            $parent_cats = ww_tvs_get_allowed_channel_product_cats();
-                            if (!empty($parent_cats)) {
-                                foreach ($parent_cats as $cat) {
-                                    echo '<option value="' . esc_attr($cat['code']) . '">' . esc_html($cat['name']) . '</option>';
+                                <option value="">-- Select Parent Category --</option>
+                                <?php
+                                $parent_cats = ww_tvs_get_allowed_channel_product_cats();
+                                if (!empty($parent_cats)) {
+                                    foreach ($parent_cats as $cat) {
+                                        echo '<option value="' . esc_attr($cat['code']) . '">' . esc_html($cat['name']) . '</option>';
+                                    }
                                 }
-                            }
-                            ?>
-                        </select>
-                        <p class="description">This will fetch child categories and products under the selected
-                            parent.</p>
-                    </td>
-                </tr>
+                                ?>
+                            </select>
+                            <p class="description">This will fetch child categories and products under the selected
+                                parent.</p>
+                        </td>
+                    </tr>
 
-                <tr>
-                    <th scope="row">Child Categories</th>
-                    <td>
-                        <div id="child-category-container"
-                             style="margin-top:10px;grid-gap: 10px;display: flex;flex-wrap: wrap"></div>
-                        <p class="description">Child categories will appear here dynamically.</p>
-                    </td>
-                </tr>
+                    <tr>
+                        <th scope="row">Child Categories</th>
+                        <td>
+                            <div id="child-category-container"
+                                style="margin-top:10px;grid-gap: 10px;display: flex;flex-wrap: wrap"></div>
+                            <p class="description">Child categories will appear here dynamically.</p>
+                        </td>
+                    </tr>
                 </tbody>
             </table>
 
             <p class="submit">
                 <button type="submit" class="button button-primary button-hero">🚀 Fetch Products</button>
             </p>
+
+            <span style='color:red;' id='msg'></span>
         </form>
     </div>
 </div>
@@ -106,4 +108,3 @@ if (isset($_POST['tvc_parent_category_code'])) {
         echo "Product Sync ype is not set";
     }
 }
-

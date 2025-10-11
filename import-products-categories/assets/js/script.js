@@ -34,10 +34,13 @@ jQuery(document).ready(function ($) {
               container.append(response.data);
             }
 
-            $("select.select2").select2();
+            $(".tvc_importer .select2").select2();
           } else {
-            console.log(response);
-            // alert(response.error_msg);
+            $("#msg").html(response.error_msg);
+
+            setTimeout(() => {
+              $("#msg").html();
+            }, 1000);
           }
         }
       );

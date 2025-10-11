@@ -129,7 +129,7 @@ class MPI_Admin
             'mpi-admin-js',
             TVC_MPI_PLUGIN_URL . 'assets/js/script.js',
             ['jquery'],
-            '1.'+ rand(1,10),
+            '1.' + rand(1, 10),
             true
         );
 
@@ -239,7 +239,7 @@ class MPI_Admin
         } else {
             wp_send_json(array(
                 'msg' => '',
-                "error_msg" => "No child categories found for this category. Please create a child category and try again.",
+                "error_msg" => "No child categories found for this category.",
                 "data" => "",
                 "success" => 0
             ));

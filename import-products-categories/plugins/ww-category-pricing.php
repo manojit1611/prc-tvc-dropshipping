@@ -49,6 +49,11 @@ function ww_adjust_price($price, $product)
             break;
         }
     }
+
+    // 💱 Convert USD → AUD
+    $usd_to_aud_rate = 1.53; // 🔹 Set your live conversion rate here
+    $price = $price * $usd_to_aud_rate;
+
     return $price;
 }
 
@@ -95,7 +100,6 @@ function ww_admin_category_pricing_page()
 
         echo '<div class="updated"><p>Rule saved successfully.</p></div>';
     }
-
 
     // Delete
     if (isset($_GET['delete']) && check_admin_referer('ww_delete_rule', 'ww_nonce')) {

@@ -29,34 +29,34 @@
 
         <form method="post" id="mpi-tvc-category-form">
             <?php wp_nonce_field('mpi_import_nonce'); ?>
-            <table class="form-table">
+            <table class="form-table tvc_importer">
                 <tbody>
-                <input type="hidden" value="product_cat" name="sync_type"/>
-                <tr>
-                    <th scope="row"><label for="parent_category">Parent Category</label></th>
-                    <td>
-                        <select required name="parent_category_code" class='select2' id="parent_category" style="min-width: 250px;">
-                            <option value="">-- Select Parent Category --</option>
-                            <?php
-                            $parent_cats = ww_tvs_get_allowed_channel_product_cats();
-                            if (!empty($parent_cats)) {
-                                foreach ($parent_cats as $cat) {
-                                    echo '<option value="' . esc_attr($cat['code']) . '">' . esc_html($cat['name']) . '</option>';
+                    <input type="hidden" value="product_cat" name="sync_type" />
+                    <tr>
+                        <th scope="row"><label for="parent_category">Parent Category</label></th>
+                        <td>
+                            <select required name="parent_category_code" class='select2' id="parent_category" style="min-width: 250px;">
+                                <option value="">-- Select Parent Category --</option>
+                                <?php
+                                $parent_cats = ww_tvs_get_allowed_channel_product_cats();
+                                if (!empty($parent_cats)) {
+                                    foreach ($parent_cats as $cat) {
+                                        echo '<option value="' . esc_attr($cat['code']) . '">' . esc_html($cat['name']) . '</option>';
+                                    }
                                 }
-                            }
-                            ?>
-                        </select>
-                    </td>
-                </tr>
+                                ?>
+                            </select>
+                        </td>
+                    </tr>
 
-                <tr>
-                    <th scope="row">Child Categories</th>
-                    <td>
-                        <div id="child-category-container"
-                             style="margin-bottom:10px;grid-gap: 10px;display: flex;flex-wrap: wrap"></div>
-                        <p style="margin-top: 0;" class="description">Child categories will appear here dynamically.</p>
-                    </td>
-                </tr>
+                    <tr>
+                        <th scope="row">Child Categories</th>
+                        <td>
+                            <div id="child-category-container"
+                                style="margin-bottom:10px;grid-gap: 10px;display: flex;flex-wrap: wrap"></div>
+                            <p style="margin-top: 0;" class="description">Child categories will appear here dynamically.</p>
+                        </td>
+                    </tr>
                 </tbody>
             </table>
 
@@ -233,7 +233,7 @@ if (isset($_POST['parent_category_code'])) {
 
                 if ($term_id = ww_tvc_get_term_data_by_tvc_code(json_decode(wp_unslash($categoryCode[0]), true)['Code'])) {
                     $term_id = $term_id->term_id;
-                    
+
                     $product_ids = get_posts([
                         'post_type'   => 'product',
                         'numberposts' => -1,
@@ -246,7 +246,7 @@ if (isset($_POST['parent_category_code'])) {
                             ],
                         ],
                     ]);
-    
+
                     if (!empty($product_ids)) {
                         foreach ($product_ids as $product_id) {
                             wp_update_post([
@@ -255,11 +255,11 @@ if (isset($_POST['parent_category_code'])) {
                             ]);
                         }
                     }
-    
+
                     // 2️⃣ Delete the category itself
                     wp_delete_term($term_id, 'product_cat');
                 }
-                
+
                 // TODO fire action based on status
                 tvc_sync_log("Skipped invalid category record  {$cat['Name']}");
                 continue;
@@ -305,7 +305,6 @@ if (isset($_POST['parent_category_code'])) {
         }
     }
 
-//        ww_start_category_sync_now($parent_code, $existing_parent->term_id);;
+    //        ww_start_category_sync_now($parent_code, $existing_parent->term_id);;
 
 }
-
