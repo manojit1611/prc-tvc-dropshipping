@@ -235,24 +235,6 @@ function ww_tvc_print_r($data = array(), $die = false)
     }
 }
 
-// Custom error logger
-if (!function_exists('my_log_error')) {
-    function my_log_error($message)
-    {
-        $upload_dir = wp_upload_dir();
-
-        $date = date('Y-m-d');
-        $log_file = trailingslashit($upload_dir['basedir']) . "custom-errors-{$date}.log";
-
-        // Format message with timestamp
-        $timestamp = date("Y-m-d H:i:s");
-        $formatted_message = "[{$timestamp}] " . print_r($message, true) . "\n";
-
-        // Write to file (append mode)
-        error_log($formatted_message, 3, $log_file);
-    }
-}
-
 // Add a new column to the Products admin list
 add_filter('manage_edit-product_columns', 'ww_custom_product_list_column');
 function ww_custom_product_list_column($columns)
@@ -370,6 +352,7 @@ require_once TVC_MPI_PLUGIN_PATH . 'includes/api/get-model-by-post.php';
 require_once TVC_MPI_PLUGIN_PATH . 'includes/slider-shortcodes/shortcodes.php';
 require_once TVC_MPI_PLUGIN_PATH . 'includes/stock-qty-manipulation.php';
 require_once TVC_MPI_PLUGIN_PATH . 'includes/table/create_table.php';
+require_once TVC_MPI_PLUGIN_PATH . 'includes/device_heirarchy.php';
 
 // === Init Plugin ===
 add_action('plugins_loaded', function () {
@@ -599,3 +582,139 @@ function ww_save_item_specific_markup($item, $cart_item_key, $values, $order)
         $item->add_meta_data('_ww_item_markup', $item_markup, true);
     }
 }
+
+add_action('wp_ajax_get_device_children', 'dh_get_device_children');
+add_action('wp_ajax_nopriv_get_device_children', 'dh_get_device_children');
+
+function dh_get_device_children()
+{
+    $parent_id = intval($_POST['parent_id'] ?? 0);
+
+    $children = get_terms([
+        'taxonomy' => 'device_heirarchy',
+        'parent' => $parent_id,
+        'hide_empty' => false,
+    ]);
+
+    $data = [];
+    foreach ($children as $child) {
+        $image_id = get_term_meta($child->term_id, 'term_image', true);
+        $custom_term_url = get_term_meta($child->term_id, 'term_redirect_url', true);
+        $image_url = $image_id ? wp_get_attachment_image_url($image_id, 'full') : '';
+
+        $data[] = [
+            'id' => $child->term_id,
+            'name' => $child->name,
+            'image' => $image_url,
+            'custom_url' => $custom_term_url,
+            'has_children' => get_terms([
+                'taxonomy' => 'device_heirarchy',
+                'parent' => $child->term_id,
+                'hide_empty' => false,
+                'fields' => 'ids'
+            ]) ? true : false
+        ];
+    }
+
+    wp_send_json_success($data);
+}
+
+add_shortcode('device_hierarchy_browser', function () {
+    ob_start(); ?>
+
+    <style>
+        .device-level {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .device-card {
+            border: 1px solid #ccc;
+            border-radius: 10px;
+            text-align: center;
+            width: 150px;
+            padding: 10px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .device-card:hover {
+            background: #f8f8f8;
+        }
+
+        .device-back-btn {
+            background: #1e293b;
+            color: white;
+            border: none;
+            padding: 8px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-bottom: 15px;
+        }
+    </style>
+
+    <div id="device-browser">
+        <div id="device-level-container"></div>
+    </div>
+
+    <script>
+        jQuery(function($) {
+            let parentStack = []; // store previous parent IDs
+
+            function loadChildren(parent_id = 0) {
+                $.post('<?php echo admin_url('admin-ajax.php'); ?>', {
+                    action: 'get_device_children',
+                    parent_id: parent_id
+                }, function(response) {
+                    if (response.success) {
+                        const container = $('#device-level-container');
+                        container.html('');
+
+                        // Add Back button if not top-level
+                        if (parent_id !== 0) {
+                            const backBtn = $('<button class="device-back-btn">← Back</button>');
+                            backBtn.on('click', function() {
+                                const prev = parentStack.pop() || 0;
+                                loadChildren(prev);
+                            });
+                            container.append(backBtn);
+                        }
+
+                        if (response.data.length === 0) {
+                            container.append('<p>No more devices.</p>');
+                            return;
+                        }
+
+                        const box = $('<div class="device-level"></div>');
+                        response.data.forEach(item => {
+                            const card = $('<div class="device-card"></div>');
+                            if (item.image)
+                                card.append('<img src="' + item.image + '" style="width:100px;height:100px;object-fit:contain;">');
+                            card.append('<p>' + item.name + '</p>');
+
+                            card.on('click', function() {
+                                if (!item.custom_url) {
+                                    if (item.has_children) {
+                                        parentStack.push(parent_id);
+                                        loadChildren(item.id);
+                                    }
+                                } else if (item.custom_url) {
+                                    window.location.href = item.custom_url;
+                                }
+                            });
+
+                            box.append(card);
+                        });
+
+                        container.append(box);
+                    }
+                });
+            }
+
+            loadChildren(0);
+        });
+    </script>
+<?php
+    return ob_get_clean();
+});
