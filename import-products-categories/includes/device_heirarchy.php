@@ -133,3 +133,171 @@ add_filter('manage_device_heirarchy_custom_column', function ($content, $column_
     }
     return $content;
 }, 10, 3);
+
+add_action('wp_ajax_get_device_children', 'dh_get_device_children');
+add_action('wp_ajax_nopriv_get_device_children', 'dh_get_device_children');
+
+add_shortcode('device_hierarchy_browser', function () {
+    ob_start();
+?>
+
+    <style>
+        .device-level {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .device-card {
+            border: 1px solid #ccc;
+            border-radius: 10px;
+            text-align: center;
+            width: 150px;
+            padding: 10px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .device-card:hover {
+            background: #f8f8f8;
+        }
+
+        .device-back-btn {
+            background: #1e293b;
+            color: white;
+            border: none;
+            padding: 8px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-bottom: 15px;
+        }
+    </style>
+
+    <div id="device-browser">
+        <div id="breadcrumb" class="text-sm text-gray-600 mb-4 flex flex-wrap justify-center gap-1"></div>
+
+        <div id="device-level-container"></div>
+    </div>
+
+    <script>
+        jQuery(function($) {
+            let parentStack = [];
+            let currentLevel = 1;
+
+
+            function loadChildren(parent_id = 0, level = 1) {
+                $.post('<?php echo admin_url('admin-ajax.php'); ?>', {
+                    action: 'get_device_children',
+                    parent_id: parent_id,
+                    level: level
+                }, function(response) {
+                    if (response.success) {
+                        const container = $('#device-level-container');
+                        container.html(response.data);
+
+                        // Back button
+                        $('#device-back-btn').on('click', function() {
+                            const prev = parentStack.pop() || {
+                                id: 0,
+                                level: 1
+                            };
+                            loadChildren(prev.id, prev.level);
+                        });
+
+                        // Device card click
+                        $('.device-card').on('click', function() {
+                            const id = $(this).data('id');
+                            const url = $(this).data('url');
+                            const hasChildren = $(this).data('has-children') == 1;
+
+                            if (url) {
+                                window.location.href = url;
+                            } else if (hasChildren) {
+                                parentStack.push({
+                                    id: parent_id,
+                                    level: level
+                                });
+                                loadChildren(id, level + 1);
+                            }
+                        });
+                    }
+                });
+            }
+
+            loadChildren(0, 1);
+        });
+    </script>
+
+<?php
+    return ob_get_clean();
+});
+
+add_action('wp_ajax_get_device_children', 'dh_get_device_children');
+add_action('wp_ajax_nopriv_get_device_children', 'dh_get_device_children');
+
+function dh_get_device_children()
+{
+    $parent_id = intval($_POST['parent_id'] ?? 0);
+    $level = intval($_POST['level'] ?? 1);
+
+    // Determine the header title based on hierarchy level
+    $headings = get_device_heirarchy_types();
+
+    $heading = $headings[$level] ?? 'Select Option';
+
+    $children = get_terms([
+        'taxonomy' => 'device_heirarchy',
+        'parent'   => $parent_id,
+        'hide_empty' => false,
+    ]);
+
+    ob_start(); ?>
+
+    <div class="text-center mb-6">
+        <h2 class="text-xl font-semibold text-gray-800"><?php echo esc_html($heading); ?></h2>
+    </div>
+
+    <?php if ($parent_id !== 0): ?>
+        <div class="mb-4">
+            <button id="device-back-btn" class="bg-gray-800 text-white px-4 py-2 rounded-md hover:bg-gray-700">
+                ← Back
+            </button>
+        </div>
+<?php endif;
+
+    if (empty($children)) {
+        echo '<p>No more devices.</p>';
+    } else {
+        echo '<div class="device-level">';
+        foreach ($children as $child) {
+            $image_id  = get_term_meta($child->term_id, 'term_image', true);
+            $custom_url = get_term_meta($child->term_id, 'term_redirect_url', true);
+            $image_url = $image_id ? wp_get_attachment_image_url($image_id, 'full') : '';
+
+            $has_children = get_terms([
+                'taxonomy' => 'device_heirarchy',
+                'parent'   => $child->term_id,
+                'hide_empty' => false,
+                'fields'   => 'ids'
+            ]) ? true : false;
+
+            echo '<div class="device-card" 
+                data-id="' . esc_attr($child->term_id) . '" 
+                data-has-children="' . ($has_children ? '1' : '0') . '" 
+                data-url="' . esc_url($custom_url) . '">';
+
+            if ($image_url) {
+                echo '<img src="' . esc_url($image_url) . '" style="width:100px;height:100px;object-fit:contain;">';
+            }
+
+            echo '<p>' . esc_html($child->name) . '</p>';
+            echo '</div>';
+        }
+        echo '</div>';
+    }
+
+    $html = ob_get_clean();
+    wp_send_json_success($html);
+}
+
+?>

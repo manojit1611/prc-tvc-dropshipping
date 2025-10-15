@@ -25,17 +25,6 @@ function mpi_download_image_to_media($url, $title = '')
     return $id;
 }
 
-function get_type($index)
-{
-    $types = [
-        'brand',
-        'model',
-        'series',
-    ];
-
-    return $types[$index];
-}
-
 /**
  * @return string
  * ww_tvc_get_bulk_pricing_db_table_name
@@ -103,8 +92,9 @@ function ww_tvc_get_manufacturer_type()
  * @param string $code  The value of _tvc_product_cat_code to search for.
  * @return int|false    Term ID if found, false if not found.
  */
-function category_exists_by_code( $code ) {
-    $term = get_terms( array(
+function category_exists_by_code($code)
+{
+    $term = get_terms(array(
         'taxonomy'   => 'product_cat',
         'hide_empty' => false,
         'meta_query' => array(
@@ -115,11 +105,23 @@ function category_exists_by_code( $code ) {
         ),
         'number' => 1, // limit to 1 for performance
         'fields' => 'ids'
-    ) );
+    ));
 
-    if ( ! empty( $term ) && ! is_wp_error( $term ) ) {
+    if (! empty($term) && ! is_wp_error($term)) {
         return $term[0]; // return term_id
     }
 
     return false;
+}
+
+function get_device_heirarchy_types()
+{
+    $headings = [
+        1 => 'Select Manufacturer',
+        2 => 'Select Your Device Type',
+        3 => 'Select Your Device Series',
+        4 => 'Select Your Device'
+    ];
+
+    return $headings;
 }

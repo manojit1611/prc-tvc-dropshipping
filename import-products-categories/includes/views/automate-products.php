@@ -177,3 +177,30 @@ function ww_start_product_import($category_code = '', $beginDate = null, $endDat
         [$import_batch_id, $params]
     );
 }
+
+/**
+ * update Shipping rates.
+ *
+ * @param string $category_code Leave empty to fetch all products.
+ */
+function ww_shipping_rate($sku, $product_id)
+{
+    $importer = new MPI_Importer;
+
+    $importer->get_shipping_rate($sku, $product_id);
+}
+add_action('ww_shipping_rate', 'ww_shipping_rate', 10, 2);
+
+/**
+ * Kick off a shipping rates.
+ *
+ * @param string $category_code Leave empty to fetch all products.
+ */
+function ww_start_shipping_rate($sku, $product_id)
+{
+    as_schedule_single_action(
+        time(),
+        'ww_shipping_rate',
+        [$sku, $product_id]
+    );
+}

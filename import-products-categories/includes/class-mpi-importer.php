@@ -23,7 +23,6 @@ class MPI_Importer
 
     public function register_custom_taxonomies()
     {
-
         // Manufacturer
         register_taxonomy(
             'product_manufacturer',
@@ -72,6 +71,31 @@ class MPI_Importer
                 'query_var' => true,
                 // Base slug will be overridden dynamically per manufacturer
                 'rewrite' => array('slug' => 'manufacturer', 'with_front' => false, 'hierarchical' => true),
+            )
+        );
+
+        register_taxonomy(
+            'device_heirarchy',
+            'product',
+            array(
+                'labels' => array(
+                    'name' => 'Device Heirarchy',
+                    'singular_name' => 'Device Heirarchy',
+                    'search_items' => 'Device Heirarchy',
+                    'all_items' => 'All Device Heirarchy',
+                    'edit_item' => 'Edit Device Heirarchy',
+                    'update_item' => 'Update Device Heirarchy',
+                    'add_new_item' => 'Add New Device Heirarchy',
+                    'new_item_name' => 'New Device Heirarchy Name',
+                    'menu_name' => 'Device Heirarchy',
+                ),
+                'hierarchical' => true,
+                'public' => true,
+                'show_ui' => true,
+                'show_admin_column' => true,
+                'query_var' => true,
+                // Base slug will be overridden dynamically per manufacturer
+                // 'rewrite' => array('slug' => 'manufacturer', 'with_front' => false, 'hierarchical' => true),
             )
         );
     }
@@ -253,7 +277,7 @@ class MPI_Importer
     {
         $product_id = $product->get_id();
 
-            // $this->update_tvc_bulk_pricing_table($product_id, $tvc_product_data);
+        // $this->update_tvc_bulk_pricing_table($product_id, $tvc_product_data);
         $this->update_tvc_products($sku, $product_id, $tvc_product_data);
 
         $brandIds = $this->add_update_manufacturer($tvc_product_data, $product_id);
@@ -266,7 +290,8 @@ class MPI_Importer
 
         $this->also_available_products($model_list, $sku, $product_id);
 
-        $this->get_shipping_rate($sku, $product_id);
+        ww_start_shipping_rate($sku, $product_id);
+        // $this->get_shipping_rate($sku, $product_id);
     }
 
     /**
@@ -401,7 +426,7 @@ class MPI_Importer
             return ['error' => 'Failed to retrieve authentication token'];
         }
 
-        $api_url = TVC_BASE_URL . "/OpenApi/Product/Detail_NewVersion?ItemNo=" . urlencode($sku);
+        $api_url = TVC_BASE_URL . "/OpenApi/Product/Detail_NewVersion?ItemNo=" . urlencode($sku) . "&currency=" . TVC_CURRENCY;
 
         $args = [
             'headers' => [
@@ -464,7 +489,7 @@ class MPI_Importer
         $weight = $product_data['Properties']['Weight'] ?? '';
         $moq = $product_data['MinimumOrderQuantity'] ?? '';
         $status = "publish";
-        //        $status = ($product_data['ProductStatus'] == 1) ? 'publish' : 'draft';
+        //$status = ($product_data['ProductStatus'] == 1) ? 'publish' : 'draft';
 
         // TVC stock normal and out of stock
         $allowForPublishStatus = array(1);
