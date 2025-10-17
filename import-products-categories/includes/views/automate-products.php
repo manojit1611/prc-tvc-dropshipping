@@ -106,11 +106,10 @@ function ww_import_product_batch($import_batch_id, $filters = [])
                 ww_tvc_release_auto_pull_lock($import_batch_id);
             }
 
-            $batchInfo = get_import_batch_info($import_batch_id);
-
+            $batchInfo = get_last_import_batch_info();
             if (!empty($batchInfo) && ($filters['endDate'] > $batchInfo['endDate'])) {
                 $params = $batchInfo ? json_decode($batchInfo['current_args']) : [];
-                update_auto_pull_data($import_batch_id, $params);
+                update_auto_pull_data($batchInfo['id'], $params);
             }
 
             return;
@@ -183,15 +182,19 @@ function ww_start_product_import($category_code = '', $beginDate = null, $endDat
     );
 }
 
-function get_import_batch_info($batch_id)
+function get_last_import_batch_info()
 {
     global $wpdb;
-    $batch_id = $batch_id + 1;
 
     $row = $wpdb->get_row(
         $wpdb->prepare(
-            "SELECT * FROM {$wpdb->prefix}tvc_import_batches WHERE id = %d AND status = " . ww_tvc_batch_pending_status_flag() . " AND sync_type = " . ww_tvc_auto_pull_sync_type_flag(),
-            $batch_id
+            "SELECT * FROM {$wpdb->prefix}tvc_import_batches 
+         WHERE status = %d 
+         AND sync_type = %d 
+         ORDER BY id DESC 
+         LIMIT 1",
+            ww_tvc_batch_pending_status_flag(),
+            ww_tvc_auto_pull_sync_type_flag()
         ),
         ARRAY_A
     );

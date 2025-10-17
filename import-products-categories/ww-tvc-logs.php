@@ -135,7 +135,7 @@ function ww_tvc_log_insert_product_sync($batch_id, $tvc_sku, $status = 0, $meta_
     );
 
     // Correct format: integer, string, integer, string, string
-//    $format = array('%d', '%s', '%d', '%s', '%s');
+    // $format = array('%d', '%s', '%d', '%s', '%s');
 
     // Insert data
     $inserted = $wpdb->insert($table_name, $data);
@@ -156,7 +156,7 @@ function ww_tvc_log_insert_product_sync($batch_id, $tvc_sku, $status = 0, $meta_
  * @return bool|int|mysqli_result|null
  * ww_tvc_log_update_product_sync
  */
-function ww_tvc_log_update_product_sync($batch_id, $tvc_sku, $status = null, $meta_data = null, $tvc_product_data = null)
+function ww_tvc_log_update_product_sync($batch_id, $tvc_sku, $status = null, $meta_data = null, $tvc_product_data = null, $msg = null)
 {
     global $wpdb;
 
@@ -180,6 +180,11 @@ function ww_tvc_log_update_product_sync($batch_id, $tvc_sku, $status = null, $me
 
     if ($tvc_product_data !== null) {
         $data['tvc_product_data'] = json_encode($tvc_product_data);
+        $format[] = '%s';
+    }
+
+    if ($msg !== null) {
+        $data['failed_log'] = $msg;
         $format[] = '%s';
     }
 
