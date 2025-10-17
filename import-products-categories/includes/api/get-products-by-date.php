@@ -64,17 +64,17 @@ function ww_tvc_last_updated_products_pull_callback(WP_REST_Request $request)
     if (!$is_running) {
         update_auto_pull_data($import_batch_id, $params);
 
-        // Mark as running before scheduling
+        // // Mark as running before scheduling
         // update_option('tvc_auto_product_pull_running', true, false);
 
-        // 🔹 Schedule background job
+        // // 🔹 Schedule background job
         // as_schedule_single_action(
         //     time(),
         //     'ww_import_product_batch',
         //     [$import_batch_id, $params]
         // );
 
-        // Update the last sync start time
+        // // Update the last sync start time
         // update_option('tvc_last_sync_time', $endDate, false);
 
         $message = 'New import batch started successfully.';

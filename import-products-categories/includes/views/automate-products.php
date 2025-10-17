@@ -106,11 +106,16 @@ function ww_import_product_batch($import_batch_id, $filters = [])
                 ww_tvc_release_auto_pull_lock($import_batch_id);
             }
 
-            $batchInfo = get_last_import_batch_info();
-            if (!empty($batchInfo) && ($filters['endDate'] > $batchInfo['endDate'])) {
-                $params = $batchInfo ? json_decode($batchInfo['current_args']) : [];
-                update_auto_pull_data($batchInfo['id'], $params);
+            $currentBatchData = ww_get_batch_details($import_batch_id);
+
+            if ($currentBatchData['sync_type'] == ww_tvc_auto_pull_sync_type_flag()) {
+                $upcomingBatchData = ww_get_upcoming_batch_details($currentBatchData['created_at']);
             }
+
+            if ($upcomingBatchData === null) return;
+
+            $params = $upcomingBatchData ? json_decode($upcomingBatchData['current_args']) : [];
+            update_auto_pull_data($upcomingBatchData['id'], $params);
 
             return;
         }
@@ -182,19 +187,40 @@ function ww_start_product_import($category_code = '', $beginDate = null, $endDat
     );
 }
 
-function get_last_import_batch_info()
+function ww_get_upcoming_batch_details($created_at)
 {
     global $wpdb;
 
     $row = $wpdb->get_row(
         $wpdb->prepare(
             "SELECT * FROM {$wpdb->prefix}tvc_import_batches 
-         WHERE status = %d 
-         AND sync_type = %d 
+             WHERE created_at > %s
+             AND sync_type = %d
+             AND status = %d
+             ORDER BY created_at ASC
+             LIMIT 1",
+            $created_at,
+            ww_tvc_auto_pull_sync_type_flag(),
+            ww_tvc_batch_pending_status_flag()
+        ),
+        ARRAY_A
+    );
+
+    return $row;
+}
+
+
+function ww_get_batch_details($batch_id)
+{
+    global $wpdb;
+
+    $row = $wpdb->get_row(
+        $wpdb->prepare(
+            "SELECT * FROM {$wpdb->prefix}tvc_import_batches 
+            where id = %d
          ORDER BY id DESC 
          LIMIT 1",
-            ww_tvc_batch_pending_status_flag(),
-            ww_tvc_auto_pull_sync_type_flag()
+            $batch_id
         ),
         ARRAY_A
     );

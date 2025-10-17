@@ -232,7 +232,7 @@ class MPI_Importer
                     $checkCategory = category_exists_by_code($tvc_product_data['CatalogCode']);
                     if (!$checkCategory) {
                         ww_tvc_log_increment_total_failed($import_batch_id);
-                        ww_tvc_log_update_product_sync($import_batch_id, $sku, 0, null, null, 'Category Code does not exist ' . $tvc_product_data['CatalogCode']);
+                        ww_tvc_log_update_product_sync($import_batch_id, $sku, 0, null, null, 'Category Code does not exist ' . $tvc_product_data['CatalogCode'] . ' for product: ' . ($tvc_product_data['Title'] ?? '') . " {$sku}");
                         tvc_sync_log('Category Code does not exist ' . $tvc_product_data['CatalogCode'] . ' for product: ' . $sku, 'tvc-product-category');
                         continue;
                     }
