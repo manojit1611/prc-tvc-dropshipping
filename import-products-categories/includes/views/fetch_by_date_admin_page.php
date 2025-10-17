@@ -15,12 +15,12 @@
                     <tr>
                         <td style="display: flex;flex-direction: column;align-items: center;justify-content: start;">
                             <label>Start Date
-                                <input type="date" id="start_date" name="start_date" style="min-width: 250px;"
+                                <input type="datetime-local" id="start_date" name="start_date" style="min-width: 250px;"
                                     placeholder="Enter Start Date to fetch">
                             </label>
 
                             <label>End Date
-                                <input type="date" id="end_date" name="end_date" style="min-width: 250px;margin-top: 10px;" 
+                                <input type="datetime-local" id="end_date" name="end_date" style="min-width: 250px;margin-top: 10px;"
                                     placeholder="Enter End Date to fetch">
                             </label>
                             <button type="button" id="fetch_date_btn" class="button" style='margin-top: 10px;'>Fetch</button>
@@ -36,9 +36,8 @@
 <?php require 'pre-loader.php'; ?>
 
 <script>
-
-    jQuery(document).ready(function ($) {
-        $('#fetch_date_btn').on('click', function () {
+    jQuery(document).ready(function($) {
+        $('#fetch_date_btn').on('click', function() {
             var start_date = $('#start_date').val();
             var end_date = $('#end_date').val();
 
@@ -58,19 +57,17 @@
                     end_date: end_date,
                     redirect: false
                 },
-                success: function (response) {
+                success: function(response) {
                     if (response.success) {
                         $('#ajax_result').html(response.data.message);
                     } else {
                         $('#ajax_result').html('❌ ' + response.data.message);
                     }
                 },
-                error: function () {
+                error: function() {
                     $('#ajax_result').html('❌ Something went wrong.');
                 }
             });
         });
     });
-
 </script>
-

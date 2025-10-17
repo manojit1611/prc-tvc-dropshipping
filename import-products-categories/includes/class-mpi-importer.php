@@ -221,7 +221,8 @@ class MPI_Importer
                 $tvc_product_data = $response;
 
                 if (isset($tvc_product_data['Code']) && $tvc_product_data['Code'] == 404) {
-                    $invalid_records[] = ['Empty Product' => $sku];
+                    ww_tvc_log_increment_total_failed($import_batch_id);
+                    ww_tvc_log_update_product_sync($import_batch_id, $sku, 0, null, null, 'Product skipped due to empty details from TVC SKU API');
                     tvc_sync_log($sku . ' product skipped due to empty details from TVC SKU API', 'tvc-product-api');
                     continue;
                 }
@@ -230,8 +231,9 @@ class MPI_Importer
                 if (function_exists('category_exists_by_code')) {
                     $checkCategory = category_exists_by_code($tvc_product_data['CatalogCode']);
                     if (!$checkCategory) {
-                        tvc_sync_log('Category Code does not exist ' . $tvc_product_data['CatalogCode'] . 'for product: ' . $sku, 'tvc-product-category');
-                        $invalid_records[] = ['Category Code does not exist ' . $tvc_product_data['CatalogCode'] => $sku];
+                        ww_tvc_log_increment_total_failed($import_batch_id);
+                        ww_tvc_log_update_product_sync($import_batch_id, $sku, 0, null, null, 'Category Code does not exist ' . $tvc_product_data['CatalogCode']);
+                        tvc_sync_log('Category Code does not exist ' . $tvc_product_data['CatalogCode'] . ' for product: ' . $sku, 'tvc-product-category');
                         continue;
                     }
                 }
@@ -242,8 +244,6 @@ class MPI_Importer
                 // get updated woo product details
                 $product = wc_get_product($product_id);
                 // update tvc product details
-                // $this->update_tvc_products($p, $product_id, $tvc_product_data);
-                // $this->update_additional_info($product_id, $tvc_product_data, $product, $model_list, $sku);
                 $this->update_additional_info($tvc_product_data, $product, $model_list, $sku);
 
                 // Update product states
@@ -254,11 +254,10 @@ class MPI_Importer
                 tvc_sync_log($sku . ' product updated successfully in batch ' . $import_batch_id, 'product');
                 ww_tvc_log_update_product_sync($import_batch_id, $sku, 1, array('sync_state' => $this->syncProductState));
                 ww_tvc_log_increment_total_success($import_batch_id); // in increment in batch table
-
             } catch (Exception $e) {
                 // keep the product failed with state updated
                 tvc_sync_log($sku . ' product failed to update in batch ' . $import_batch_id . ' due to ' . $e->getMessage(), 'product');
-                ww_tvc_log_update_product_sync($import_batch_id, $sku, 0, array('sync_state' => $this->syncProductState));
+                ww_tvc_log_update_product_sync($import_batch_id, $sku, 0, array('sync_state' => $this->syncProductState), null, $e->getMessage());
                 ww_tvc_log_increment_total_failed($import_batch_id);
             }
         }
@@ -322,8 +321,7 @@ class MPI_Importer
 
         // 🔹 Helper: handle error response/redirect
         $handle_error = function ($msg) use ($redirect, $args) {
-            my_log_error($msg);
-
+            // my_log_error($msg);
             if ($redirect) {
                 $args['msg'] = $msg;
                 wp_safe_redirect(add_query_arg($args, admin_url('edit.php')));
@@ -800,7 +798,7 @@ class MPI_Importer
         $table_name = $wpdb->prefix . ww_tvc_get_manufacturer_product_relation_table_name();
         $new_term = [];
         if (empty($data['Applicables'])) {
-            my_log_error('Empty Applicables ' . $product_id);
+            // my_log_error('Empty Applicables ' . $product_id);
             return;
         }
 
@@ -876,7 +874,7 @@ class MPI_Importer
     public function add_update_models($data, $product_id)
     {
         if (empty($data['Applicables'])) {
-            my_log_error('Empty Applicables ' . $product_id);
+            // my_log_error('Empty Applicables ' . $product_id);
             return;
         }
 

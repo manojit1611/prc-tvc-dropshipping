@@ -61,7 +61,7 @@ function tvc_plugin_create_tables()
         batch_id LONGTEXT NULL,
         total_success INT NULL,
         total_failed INT NULL,
-        status VARCHAR(12) NULL,
+        status VARCHAR(12) DEFAULT '0',
         sync_type TINYINT DEFAULT 0,
         current_args JSON NULL,
         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -77,6 +77,7 @@ function tvc_plugin_create_tables()
         `status` tinyint NOT NULL DEFAULT '0',
         `meta_data` longtext,
         `tvc_product_data` longtext,
+        `failed_log` LONGTEXT DEFAULT NULL,
         `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
         `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         PRIMARY KEY (`id`)

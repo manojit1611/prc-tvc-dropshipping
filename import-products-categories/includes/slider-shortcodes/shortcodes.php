@@ -35,6 +35,9 @@ function custom_wc_slider_init_js()
                 margin: 10,
                 nav: false,
                 dots: true,
+                autoplayHoverPause: true,
+                autoplay: true,
+                autoplayTimeout: 2000,
                 responsive: {
                     0: {
                         items: 2
@@ -57,26 +60,32 @@ function custom_wc_slider_init_js()
                 margin: 10,
                 nav: false,
                 dots: true,
+                autoplayHoverPause: true,
+                autoplay: true,
+                autoplayTimeout: 2000,
                 responsive: {
                     0: {items: 2},
                     600: {items: 3},
                     768: {items: 5},
-                    1200: {items: 5}
+                    1200: {items: 6}
                 }
             });
 
             // Product Slider Common
             $('.woo-owl-slider ul.products').owlCarousel({
                 loop: true,
-                margin: 20,
+                margin: 16,
                 nav: true,
                 dots: false,
+                autoplayHoverPause: true,
+                autoplay: true,
+                autoplayTimeout: 2000,
                 responsive: {
                     0: {items: 2},
                     600: {items: 3},
                     768: {items: 4},
                     1024: {items: 5},
-                    1200: {items: 6}
+                    1200: {items: 5}
                 }
             });
 
@@ -113,22 +122,6 @@ function custom_wc_slider_styles()
             gap: 0 !important;
         }
 
-        .ww-product-section__items-area {
-            overflow: hidden;
-        }
-
-        .ww-product-section {
-            margin-top: 40px;
-        }
-
-        .ww-product-section__entry-heading {
-            text-align: center;
-            margin-bottom: 1.5rem;
-        }
-
-        @media screen and (max-width: 1023px) {
-
-        }
 
         .owl-carousel .owl-nav {
             left: 0;
@@ -233,11 +226,11 @@ add_action('wp_head', 'custom_wc_slider_styles');
 function custom_wc_product_slider_shortcode($atts)
 {
     ob_start(); ?>
-    <div class="woo-owl-slider woo-products ww-product-section">
-        <div class="ww-product-section__entry-heading">
-            <h4><?php echo __('Recent Products') ?></h4>
+    <div class="woo-owl-slider woo-products ">
+        <div>
+            <h2><?php echo __('Recent Products') ?></h2>
         </div>
-        <div class="ww-product-section__items-area">
+        <div class="">
             <?php echo do_shortcode('[recent_products per_page="8" columns="4"]'); ?>
         </div>
     </div>
@@ -251,11 +244,8 @@ add_shortcode('recent_product_slider', 'custom_wc_product_slider_shortcode');
 function custom_wc_best_seller_slider_shortcode($atts)
 {
     ob_start(); ?>
-    <div class="woo-owl-slider woo-products ww-product-section">
-        <div class="ww-product-section__entry-heading">
-            <h4>Best Selling Products</h4>
-        </div>
-        <div class="ww-product-section__items-area">
+    <div class="woo-owl-slider woo-products ">
+        <div>
             <?php echo do_shortcode('[best_selling_products per_page="8" columns="4"]'); ?>
         </div>
     </div>
@@ -270,11 +260,8 @@ function custom_new_arrival_slider_shortcode($atts)
 {
     $loop = new WP_Query(['post_type' => 'product', 'posts_per_page' => 8, 'post_status' => 'publish']);
     ob_start(); ?>
-    <div class="woo-owl-slider woo-products ww-product-section">
-        <div class="ww-product-section__entry-heading">
-            <h4>New Arrivals</h4>
-        </div>
-        <div class="ww-product-section__items-area">
+    <div class="woo-owl-slider woo-products ">
+        <div class="">
             <?php
             echo do_shortcode('[products limit="8" columns="4" orderby="id" order="DESC" visibility="visible"]');
             ?>
@@ -290,11 +277,8 @@ add_shortcode('new_arrival', 'custom_new_arrival_slider_shortcode');
 function custom_wc_category_slider_shortcode($atts)
 {
     ob_start(); ?>
-    <div class="woo-owl-slider-categories ww-product-section">
-        <div class="ww-product-section__entry-heading">
-            <h4>Featured Categories</h4>
-        </div>
-        <div class="ww-product-section__items-area">
+    <div class="woo-owl-slider-categories">
+        <div class="">
             <?php echo do_shortcode('[product_categories limit=8]'); ?>
         </div>
     </div>
@@ -313,7 +297,7 @@ function custom_wc_specific_category_slider_shortcode($atts)
         echo '<p>Please provide a category.</p>';
     } else { ?>
         <div class="woo-owl-slider woo-products">
-            <h4><?php echo esc_html($atts['title']); ?></h4>
+            <h2><?php echo esc_html($atts['title']); ?></h2>
             <?php echo do_shortcode('[product_category category="' . esc_attr($atts['category']) . '"]'); ?>
         </div>
     <?php }
@@ -343,11 +327,8 @@ function custom_wc_all_brands_shortcode($atts)
 
     if (!empty($brands) && !is_wp_error($brands)) { ?>
 
-        <div class="ww-brands-section ww-product-section">
-            <div class="ww-product-section__entry-heading">
-                <h4><?php echo esc_html($atts['title']); ?></h4>
-            </div>
-            <div class="ww-product-section__items-area">
+        <div class="ww-brands-section ">
+            <div class="">
                 <ul class="woo-owl-brand-slider owl-carousel owl-theme ww-brands-row">
                     <?php foreach ($brands as $brand):
                         echo '<li class="brand-slide">';

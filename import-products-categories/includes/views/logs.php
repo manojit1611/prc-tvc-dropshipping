@@ -55,6 +55,81 @@ if (isset($_GET['restart_batch']) && !empty($_GET['restart_batch'])) {
     }
 }
 
+if (isset($_GET['force_restart_batch']) && !empty($_GET['force_restart_batch'])) {
+    $batch_id = sanitize_text_field($_GET['force_restart_batch']);
+    $batch_name = sanitize_text_field($_GET['batch_name']);
+    if (wp_verify_nonce($_GET['_wpnonce'], 'force_restart_batch_' . $batch_id)) {
+        ww_force_restart_product_batch($batch_id, $batch_name);
+
+        wp_safe_redirect(remove_query_arg(['force_restart_batch', '_wpnonce']));
+        exit;
+    }
+}
+
+function ww_force_restart_product_batch($batch_id, $batch_name)
+{
+    global $wpdb;
+
+    $wpdb->query(
+        $wpdb->prepare(
+            "UPDATE {$wpdb->prefix}actionscheduler_actions 
+            SET status = %s 
+            WHERE args LIKE %s",
+            'canceled',
+            '%' . $wpdb->esc_like($batch_name) . '%'
+        )
+    );
+
+    $row = $wpdb->get_row(
+        $wpdb->prepare(
+            "SELECT * FROM {$wpdb->prefix}tvc_import_batches WHERE id = %d",
+            $batch_id
+        ),
+        ARRAY_A
+    );
+
+    // Handle missing or invalid data
+    if (empty($row)) {
+        tvc_sync_log("Batch ID {$batch_id} not found in tvc_import_batches.", 'error');
+        return false;
+    }
+
+    if (empty($row['current_args'])) {
+        tvc_sync_log("No current_args found for batch ID {$batch_id}.", 'error');
+        return false;
+    }
+
+    $params = json_decode($row['current_args']);
+    $params->page_index = 1;
+    $params->last_product_id = null;
+
+    if (json_last_error() !== JSON_ERROR_NONE || !is_object($params)) {
+        tvc_sync_log("Invalid JSON in current_args for batch ID {$batch_id}.", 'error');
+        return false;
+    }
+
+    $params = (array) $params;
+
+    // print_r($params);
+    // die;
+
+    // 4️⃣ Schedule the new action
+    if (function_exists('as_schedule_single_action')) {
+        as_schedule_single_action(
+            time(),
+            'ww_import_product_batch',
+            [$batch_id, $params]
+        );
+    } else {
+        tvc_sync_log("Action Scheduler function missing (as_schedule_single_action).", 'error');
+        return false;
+    }
+
+    ww_tvc_log_update_batch_status($batch_id, ww_tvc_batch_running_status_flag());
+
+    tvc_sync_log("Force Restarted product import jobs.", 'product');
+}
+
 function ww_restart_product_batch($batch_id, $batch_name)
 {
     global $wpdb;
@@ -68,26 +143,6 @@ function ww_restart_product_batch($batch_id, $batch_name)
             '%' . $wpdb->esc_like($batch_name) . '%'
         )
     );
-
-
-    // $row = $wpdb->get_row(
-    //     $wpdb->prepare(
-    //         "SELECT current_args 
-    //         FROM {$wpdb->prefix}tvc_import_batches 
-    //         WHERE id = %d",
-    //         $batch_id
-    //     )
-    // );
-
-    // if ($row) {
-    //     $args = json_decode($row->current_args, true);
-    // }
-
-    // as_schedule_single_action(
-    //     time(),
-    //     'ww_import_product_batch',
-    //     [$batch_name, $args]
-    // );
 
     ww_tvc_log_update_batch_status($batch_id, ww_tvc_batch_running_status_flag());
 
@@ -251,6 +306,15 @@ if (!$current_batch) {
                                     'restart_batch_' . $batch->id,
                                 );
 
+                                $force_restart_url = wp_nonce_url(
+                                    add_query_arg([
+                                        'page' => 'tvc-logs',
+                                        'force_restart_batch' => $batch->id,
+                                        'batch_name' => $batch->batch_id,
+                                    ]),
+                                    'force_restart_batch_' . $batch->id,
+                                );
+
                                 if ($batch->status != 2 && $batch->status != 3) {
                                 ?>
                                     <a href="<?php echo esc_url($cancel_url); ?>"
@@ -274,6 +338,12 @@ if (!$current_batch) {
                                 <?php
                                 }
                                 ?>
+                                <a href="<?php echo esc_url($force_restart_url); ?>"
+                                    class="button button-small button-danger"
+                                    onclick="return confirm('Are you sure you want to force restart this batch?');">
+                                    Force restart
+                                </a>
+
                                 <a href="<?php echo esc_url($delete_url); ?>"
                                     class="button button-small button-danger"
                                     onclick="return confirm('Are you sure you want to delete this batch and all related logs?');">Delete</a>
@@ -365,9 +435,6 @@ if ($current_batch) {
         )
     );
 
-    // 	print_r($batch_details);
-    // 	die;
-
     // Total logs count
     $total_logs = $wpdb->get_var($wpdb->prepare(
         "SELECT COUNT(*) FROM $logs_table WHERE batch_id = %s",
@@ -393,6 +460,7 @@ if ($current_batch) {
         echo '<th>SKU</th>';
         echo '<th>Status</th>';
         echo '<th>Update</th>';
+        echo '<th>Message</th>';
         echo '</tr></thead><tbody>';
 
         foreach ($logs as $log) {
@@ -412,14 +480,14 @@ if ($current_batch) {
             echo '</td>';
 
             echo "<td>";
-            if (!$log->status) {
-                echo "<button id='update_btn' data-sku=" . esc_html($log->tvc_sku) . " class='button button-primary'>Update</button>";
-            } else {
-                echo "N/A";
-            }
+            echo !$log->status ? "<button id='update_btn' data-sku=" . esc_html($log->tvc_sku) . " class='button button-primary'>Update</button>" : 'N/A';
             echo "</td>";
 
-            echo '<td>';
+            echo "<td>";
+            echo $log->failed_log ? esc_html($log->failed_log) : "<span class='tvc-status-badge tvc-status-success'>Success</span>";
+            echo "</td>";
+
+            echo '</tr>';
         }
         echo '</tbody></table>';
 

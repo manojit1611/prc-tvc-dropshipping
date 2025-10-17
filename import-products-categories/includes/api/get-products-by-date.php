@@ -62,18 +62,20 @@ function ww_tvc_last_updated_products_pull_callback(WP_REST_Request $request)
     $is_running = get_option('tvc_auto_product_pull_running', false);
 
     if (!$is_running) {
+        update_auto_pull_data($import_batch_id, $params);
+
         // Mark as running before scheduling
-        update_option('tvc_auto_product_pull_running', true, false);
+        // update_option('tvc_auto_product_pull_running', true, false);
 
         // 🔹 Schedule background job
-        as_schedule_single_action(
-            time(),
-            'ww_import_product_batch',
-            [$import_batch_id, $params]
-        );
+        // as_schedule_single_action(
+        //     time(),
+        //     'ww_import_product_batch',
+        //     [$import_batch_id, $params]
+        // );
 
         // Update the last sync start time
-        update_option('tvc_last_sync_time', $endDate, false);
+        // update_option('tvc_last_sync_time', $endDate, false);
 
         $message = 'New import batch started successfully.';
     } else {
@@ -140,6 +142,3 @@ function ww_tvc_last_updated_products_pull_callback(WP_REST_Request $request)
 //        'endDate' => $endDate,
 //    ]);
 //}
-
-
-

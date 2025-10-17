@@ -106,6 +106,12 @@ function ww_import_product_batch($import_batch_id, $filters = [])
                 ww_tvc_release_auto_pull_lock($import_batch_id);
             }
 
+            $batchInfo = get_import_batch_info($import_batch_id);
+
+            if (!empty($batchInfo) && ($filters['endDate'] > $batchInfo['endDate'])) {
+                $params = $batchInfo ? json_decode($batchInfo['current_args']) : [];
+                update_auto_pull_data($import_batch_id, $params);
+            }
 
             return;
         }
@@ -117,7 +123,6 @@ function ww_import_product_batch($import_batch_id, $filters = [])
         $importer->ww_update_detail_of_products($products, $import_batch_id, $filters);
 
         if (!empty($products['lastProductId'])) {
-            // Prepare filters for the next batch
             $filters['last_product_id'] = $products['lastProductId'];
             $filters['page_index'] = ($filters['page_index'] ?? 1) + 1;
 
@@ -176,6 +181,22 @@ function ww_start_product_import($category_code = '', $beginDate = null, $endDat
         'ww_import_product_batch',
         [$import_batch_id, $params]
     );
+}
+
+function get_import_batch_info($batch_id)
+{
+    global $wpdb;
+    $batch_id = $batch_id + 1;
+
+    $row = $wpdb->get_row(
+        $wpdb->prepare(
+            "SELECT * FROM {$wpdb->prefix}tvc_import_batches WHERE id = %d AND status = " . ww_tvc_batch_pending_status_flag() . " AND sync_type = " . ww_tvc_auto_pull_sync_type_flag(),
+            $batch_id
+        ),
+        ARRAY_A
+    );
+
+    return $row;
 }
 
 /**
