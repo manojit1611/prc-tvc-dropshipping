@@ -10,13 +10,10 @@ $current_batch = isset($_GET['import_id']) ? sanitize_text_field($_GET['import_i
 if (isset($_GET['delete_batch']) && !empty($_GET['delete_batch'])) {
     $id = sanitize_text_field($_GET['delete_batch']);
     $batch_name = sanitize_text_field($_GET['delete_batch_name']);
-
     if (wp_verify_nonce($_GET['_wpnonce'], 'delete_batch_' . $id)) {
         // delete logs first
         $wpdb->delete($batches_table, ['id' => $id]);
         $wpdb->delete($sync_logs_table, ['batch_id' => $id]);
-        // $wpdb->delete($batches_table, ['id' => $id]);
-
         $wpdb->query(
             $wpdb->prepare(
                 "DELETE FROM {$wpdb->prefix}actionscheduler_actions 
@@ -24,21 +21,19 @@ if (isset($_GET['delete_batch']) && !empty($_GET['delete_batch'])) {
                 '%' . $wpdb->esc_like($batch_name) . '%'
             )
         );
-
         // redirect to avoid resubmission
         wp_safe_redirect(remove_query_arg(['delete_batch', '_wpnonce']));
         exit;
     }
 }
 
-if (isset($_GET['batch_name']) && !empty($_GET['batch_name'])) {
-    $batch_name = sanitize_text_field($_GET['batch_name']);
-    $batch_id   = sanitize_text_field($_GET['batch_id'] ?? '');
-
+// Start manage do cancel batch
+if (isset($_GET['do_cancel_batch']) && !empty($_GET['do_cancel_batch'])) {
+    $batch_name = sanitize_text_field($_GET['do_cancel_batch']);
+    $batch_id = sanitize_text_field($_GET['batch_id'] ?? '');
     // ✅ Only verify nonce if it actually exists
     if (isset($_GET['_wpnonce']) && wp_verify_nonce($_GET['_wpnonce'], 'batch_' . $batch_name)) {
         ww_cancel_product_batches($batch_id, $batch_name);
-
         wp_safe_redirect(remove_query_arg(['batch', '_wpnonce']));
         exit;
     }
@@ -66,34 +61,45 @@ if (isset($_GET['force_restart_batch']) && !empty($_GET['force_restart_batch']))
     }
 }
 
+/**
+ * @param $batch_id
+ * @param $batch_name
+ * @return bool
+ * ww_force_restart_product_batch
+ * Force restart product batch
+ */
 function ww_force_restart_product_batch($batch_id, $batch_name)
 {
     global $wpdb;
 
+    // //     Do cancel existing of exist in woocommerce
+    //     $wpdb->query(
+    //             $wpdb->prepare(
+    //                     "UPDATE {$wpdb->prefix}actionscheduler_actions 
+    //             SET status = %s 
+    //             WHERE args LIKE %s",
+    //                     'canceled',
+    //                     '%' . $wpdb->esc_like($batch_name) . '%'
+    //             )
+    //     );
+
     $wpdb->query(
         $wpdb->prepare(
             "UPDATE {$wpdb->prefix}actionscheduler_actions 
-            SET status = %s 
-            WHERE args LIKE %s",
+			SET status = %s 
+			WHERE (args LIKE %s OR extended_args LIKE %s)",
             'canceled',
-            '%' . $wpdb->esc_like($batch_name) . '%'
+            '%' . $wpdb->esc_like('"' . $batch_name . '"') . '%',
+            '%' . $wpdb->esc_like('"' . $batch_name . '"') . '%'
         )
     );
 
-    $row = $wpdb->get_row(
-        $wpdb->prepare(
-            "SELECT * FROM {$wpdb->prefix}tvc_import_batches WHERE id = %d",
-            $batch_id
-        ),
-        ARRAY_A
-    );
 
+    $row = ww_get_batch_details($batch_id);
     // Handle missing or invalid data
     if (empty($row)) {
-        tvc_sync_log("Batch ID {$batch_id} not found in tvc_import_batches.", 'error');
         return false;
     }
-
     if (empty($row['current_args'])) {
         tvc_sync_log("No current_args found for batch ID {$batch_id}.", 'error');
         return false;
@@ -102,21 +108,16 @@ function ww_force_restart_product_batch($batch_id, $batch_name)
     $params = json_decode($row['current_args']);
     $params->page_index = 1;
     $params->last_product_id = null;
-
     if (json_last_error() !== JSON_ERROR_NONE || !is_object($params)) {
         tvc_sync_log("Invalid JSON in current_args for batch ID {$batch_id}.", 'error');
         return false;
     }
-
-    $params = (array) $params;
-
-    // print_r($params);
-    // die;
+    $params = (array)$params;
 
     // 4️⃣ Schedule the new action
     if (function_exists('as_schedule_single_action')) {
         as_schedule_single_action(
-            time(),
+            time() + 10,
             'ww_import_product_batch',
             [$batch_id, $params]
         );
@@ -125,11 +126,21 @@ function ww_force_restart_product_batch($batch_id, $batch_name)
         return false;
     }
 
+    // update batch status
     ww_tvc_log_update_batch_status($batch_id, ww_tvc_batch_running_status_flag());
 
-    tvc_sync_log("Force Restarted product import jobs.", 'product');
+    // Punch log
+    tvc_sync_log("Batch forcefully restarted {$batch_name}", 'batch');
+
+    return true;
 }
 
+/**
+ * @param $batch_id
+ * @param $batch_name
+ * @return void
+ * ww_restart_product_batch
+ */
 function ww_restart_product_batch($batch_id, $batch_name)
 {
     global $wpdb;
@@ -137,37 +148,50 @@ function ww_restart_product_batch($batch_id, $batch_name)
     $wpdb->query(
         $wpdb->prepare(
             "UPDATE {$wpdb->prefix}actionscheduler_actions 
-            SET status = %s 
-            WHERE args LIKE %s",
+			SET status = %s 
+			WHERE (args LIKE %s OR extended_args LIKE %s)",
             'pending',
-            '%' . $wpdb->esc_like($batch_name) . '%'
+            '%' . $wpdb->esc_like('"' . $batch_name . '"') . '%',
+            '%' . $wpdb->esc_like('"' . $batch_name . '"') . '%'
         )
     );
 
     ww_tvc_log_update_batch_status($batch_id, ww_tvc_batch_running_status_flag());
-
-    tvc_sync_log("Restart product import jobs.", 'product');
+    tvc_sync_log("Batch Restarted {$batch_name}", 'batch');
 }
 
+/**
+ * @param $batch_id
+ * @param $batch_name
+ * @return void
+ * ww_cancel_product_batches
+ * Do cancel batch
+ */
 function ww_cancel_product_batches($batch_id, $batch_name)
 {
+    $currentBatchData = ww_get_batch_details($batch_id);
     global $wpdb;
 
     $wpdb->query(
         $wpdb->prepare(
             "UPDATE {$wpdb->prefix}actionscheduler_actions 
-            SET status = %s 
-            WHERE args LIKE %s",
+			SET status = %s 
+			WHERE (args LIKE %s OR extended_args LIKE %s)",
             'canceled',
-            '%' . $wpdb->esc_like($batch_name) . '%'
+            '%' . $wpdb->esc_like('"' . $batch_name . '"') . '%',
+            '%' . $wpdb->esc_like('"' . $batch_name . '"') . '%'
         )
     );
 
-    if (str_contains($batch_name, "AUTO_PRODUCT_PULL")) {
-        ww_tvc_release_auto_pull_lock($batch_id);
+    // check if the current batch is auto pull
+    if ($currentBatchData['sync_type'] == ww_tvc_auto_pull_sync_type_flag()) {
+        // Release automate product pull in case of sync type auto pull
+        ww_tvc_release_auto_pull_lock($batch_id, $currentBatchData);
+        // Schedule the next batch if any other batch is in the queue
+        ww_action_schedule_already_in_queue_auto_pull_batch($currentBatchData);
     }
 
-    // Mark as cancel
+    // Mark as cancel in a local database
     ww_tvc_log_update_batch_status($batch_id, ww_tvc_batch_cancel_status_flag());
 }
 
@@ -220,10 +244,18 @@ if (!$current_batch) {
                 <input type="hidden" name="page" value="tvc-logs">
                 <select name="status" style="margin-bottom: 10px;" onchange="this.form.submit()">
                     <option value="">All</option>
-                    <option value="<?php echo ww_tvc_batch_running_status_flag(); ?>" <?php selected($status_filter, ww_tvc_batch_running_status_flag()); ?>>Running</option>
-                    <option value="<?php echo ww_tvc_batch_pending_status_flag(); ?>" <?php selected($status_filter, ww_tvc_batch_pending_status_flag()); ?>>Pending</option>
-                    <option value="<?php echo ww_tvc_batch_complete_status_flag(); ?>" <?php selected($status_filter, ww_tvc_batch_complete_status_flag()); ?>>Completed</option>
-                    <option value="<?php echo ww_tvc_batch_cancel_status_flag(); ?>" <?php selected($status_filter, ww_tvc_batch_cancel_status_flag()); ?>>Cancelled</option>
+                    <option value="<?php echo ww_tvc_batch_running_status_flag(); ?>" <?php selected($status_filter, ww_tvc_batch_running_status_flag()); ?>>
+                        Running
+                    </option>
+                    <option value="<?php echo ww_tvc_batch_pending_status_flag(); ?>" <?php selected($status_filter, ww_tvc_batch_pending_status_flag()); ?>>
+                        Pending
+                    </option>
+                    <option value="<?php echo ww_tvc_batch_complete_status_flag(); ?>" <?php selected($status_filter, ww_tvc_batch_complete_status_flag()); ?>>
+                        Completed
+                    </option>
+                    <option value="<?php echo ww_tvc_batch_cancel_status_flag(); ?>" <?php selected($status_filter, ww_tvc_batch_cancel_status_flag()); ?>>
+                        Cancelled
+                    </option>
                 </select>
             </form>
         </div>
@@ -291,7 +323,7 @@ if (!$current_batch) {
                                 $cancel_url = wp_nonce_url(
                                     add_query_arg([
                                         'page' => 'tvc-logs',
-                                        'batch_name' => $batch->batch_id,
+                                        'do_cancel_batch' => $batch->batch_id,
                                         'batch_id' => $batch->id,
                                     ]),
                                     'batch_' . $batch->batch_id,
@@ -414,10 +446,10 @@ if (!$current_batch) {
 </style>
 
 <?php
-
 global $wpdb;
 
 $current_batch = isset($_GET['import_id']) ? sanitize_text_field($_GET['import_id']) : '';
+$status_filter = isset($_GET['status']) ? sanitize_text_field($_GET['status']) : '';
 $logs_table = $wpdb->prefix . 'tvc_product_sync_logs';
 
 if ($current_batch) {
@@ -437,22 +469,52 @@ if ($current_batch) {
 
     // Total logs count
     $total_logs = $wpdb->get_var($wpdb->prepare(
-        "SELECT COUNT(*) FROM $logs_table WHERE batch_id = %s",
-        $current_batch
+        "SELECT COUNT(*) FROM $logs_table WHERE batch_id = %s AND status = %d",
+        $current_batch,
+        $status_filter
     ));
 
+    $query = "SELECT * FROM $logs_table WHERE batch_id = %s";
+    $params = [$current_batch];
+
+    // Add status only if provided (not null / not empty / not -1)
+    if (!empty($status_filter) || $status_filter == 0) {
+        $query .= " AND status = %d";
+        $params[] = $status_filter;
+    }
+
+    $query .= " ORDER BY id DESC LIMIT %d OFFSET %d";
+    $params[] = $per_page;
+    $params[] = $offset;
+
+    $logs = $wpdb->get_results($wpdb->prepare($query, ...$params));
+
     // Fetch logs with limit & offset
-    $logs = $wpdb->get_results($wpdb->prepare(
-        "SELECT * FROM $logs_table WHERE batch_id = %s ORDER BY id DESC LIMIT %d OFFSET %d",
-        $current_batch,
-        $per_page,
-        $offset
-    ));
+    //     $logs = $wpdb->get_results($wpdb->prepare(
+    //             "SELECT * FROM $logs_table WHERE batch_id = %s ORDER BY id DESC LIMIT %d OFFSET %d",
+    //             $current_batch,
+    //             $per_page,
+    //             $offset
+    //     ));
 
     echo "<h4>Logs for Batch ID: " . esc_html($batch_details->batch_id) . "</h4>";
 
     echo "<span><strong>Total Success</strong></span>: " . esc_html($batch_details->total_success) . "</br>";
     echo "<span><strong>Total Failed</strong><span>: " . esc_html($batch_details->total_failed) . "</br></br>";
+
+?>
+    <label><strong>Status</strong></label>
+    <form method="get" style='margin-bottom:10px;'>
+        <input type="hidden" name="page" value="tvc-logs">
+        <input type="hidden" name="import_id" value="<?php echo esc_attr($current_batch); ?>">
+        <select name='status' onchange="this.form.submit()">
+            <option value="">Select</option>
+            <option value="0" <?php selected($status_filter, 0); ?>>Failed</option>
+            <option value="1" <?php selected($status_filter, 1); ?>>Success</option>
+        </select>
+    </form>
+
+<?php
 
     if (!empty($logs)) {
         echo '<table class="widefat fixed striped" style="width:98%;">';
@@ -535,7 +597,11 @@ if ($current_batch) {
                     sku: sku,
                     redirect: false
                 },
+                beforeSend: function() {
+                    ww_start_preloader();
+                },
                 success: function(response) {
+                    ww_stop_preloader();
                     if (response.success) {
                         alert(response.data.msg);
                     } else {
@@ -543,6 +609,7 @@ if ($current_batch) {
                     }
                 },
                 error: function() {
+                    ww_stop_preloader();
                     alert('Something went wrong.');
                 }
             });
@@ -551,3 +618,5 @@ if ($current_batch) {
 </script>
 
 </div>
+
+<?php require 'pre-loader.php'; ?>

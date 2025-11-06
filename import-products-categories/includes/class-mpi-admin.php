@@ -24,8 +24,8 @@ class MPI_Admin
 
         add_submenu_page(
             'tvc-main', // Parent slug
-            __('Pull Categories', 'import-products-categories'), // Page title
-            __('Pull Categories', 'import-products-categories'), // Menu title
+            __('1 Pull Categories', 'import-products-categories'), // Page title
+            __('1 Pull Categories', 'import-products-categories'), // Menu title
             'manage_options',
             'category_page', // Slug
             [$this, 'render_category_page'] // Callback
@@ -34,11 +34,46 @@ class MPI_Admin
         // Submenu: Product Importer
         add_submenu_page(
             'tvc-main', // Parent slug
-            __('Pull Products', 'import-products-categories'), // Page title
-            __('Pull Products', 'import-products-categories'), // Menu title
+            __('2 Pull Products', 'import-products-categories'), // Page title
+            __('2 Pull Products', 'import-products-categories'), // Menu title
             'manage_options',
             'product_page', // Slug
             [$this, 'render_product_page'] // Callback
+        );
+
+        add_submenu_page(
+            'tvc-main',
+            '3 Categories',
+            '3 Categories',
+            'manage_woocommerce',
+            'ww_import_categories',
+            function () {
+                wp_redirect(admin_url('edit-tags.php?taxonomy=product_cat&post_type=product'));
+                exit;
+            },
+            100
+        );
+
+        add_submenu_page(
+            'tvc-main', // Parent slug
+            '4 Category Pricing',
+            '4 Category Pricing',
+            'manage_woocommerce',
+            'ww-category-pricing',
+            'ww_admin_category_pricing_page'
+        );
+
+        add_submenu_page(
+            'tvc-main',
+            '5 Device Hierarchy',
+            '5 Device Hierarchy',
+            'manage_woocommerce',
+            'ww_import_device_hierarchy',
+            function () {
+                wp_redirect(admin_url('edit-tags.php?taxonomy=device_heirarchy&post_type=product'));
+                exit;
+            },
+            100
         );
 
         // Submenu: Product Fetch By SKU
@@ -79,8 +114,6 @@ class MPI_Admin
             [$this, 'render_tvc_import_logs_page']
         );
 
-
-
         add_submenu_page(
             'tvc-main', // Parent slug
             'Woo Logs',    // Page title
@@ -92,7 +125,7 @@ class MPI_Admin
                 wp_redirect(admin_url('admin.php?page=wc-status&tab=logs'));
                 exit;
             },
-            99 // Position
+            99
         );
 
         add_submenu_page(
@@ -106,9 +139,8 @@ class MPI_Admin
                 wp_redirect(admin_url('admin.php?page=wc-status&status=pending&tab=action-scheduler&s=ww_import_product_batch&paged=1'));
                 exit;
             },
-            99 // Position in submenu
+            99
         );
-
 
         add_submenu_page(
             'tvc-main', // Parent slug
@@ -118,7 +150,6 @@ class MPI_Admin
             'reset-woocommerce',
             'ww_tvc_wc_reset_page'
         );
-
 
         remove_submenu_page('tvc-main', 'tvc-main');
     }

@@ -33,29 +33,100 @@ function ww_adjust_price($price, $product)
     $rules = get_option('ww_rules', []);
     if (!is_array($rules)) return $price;
 
-    // add Extra Shipment Price
-    $shipment_price = $product->get_meta('tvc_shipping_cost') ?? 0;
-    if ($shipment_price) {
-        $price += $shipment_price;
-    }
+    $price = floatval($price);
+
+    // Add extra shipment price from product meta
+    $shipment_price = floatval($product->get_meta('tvc_shipping_cost') ?? 0);
+    $price += $shipment_price;
 
     $product_cats = wc_get_product_term_ids($product->get_id(), 'product_cat');
+    if (empty($product_cats)) return $price;
+
+    $matched_rule = null;
+    $matched_depth = -1;
+
     foreach ($rules as $r) {
-        if (isset($r['cat']) && in_array((int)$r['cat'], $product_cats, true)) {
-            $val = floatval($r['value']);
-            $ship = floatval($r['ship']);
-            $price += ($r['type'] == 'percent') ? $price * ($val / 100) : $val;
-            $price += $ship;
-            break;
+        if (!isset($r['cat'])) continue;
+
+        $rule_cat = (int) $r['cat'];
+
+        // Get all children (to ensure parent applies to subcategories)
+        $child_cats = get_term_children($rule_cat, 'product_cat');
+        $all_cats = array_merge([$rule_cat], $child_cats);
+
+        // If the product belongs to any of these categories
+        if (array_intersect($product_cats, $all_cats)) {
+            // Determine how deep the matching category is (for priority)
+            $depth = ww_get_category_depth($rule_cat);
+
+            // Keep the deepest (most specific) match only
+            if ($depth > $matched_depth) {
+                $matched_rule = $r;
+                $matched_depth = $depth;
+            }
         }
     }
 
-    // 💱 Convert USD → AUD
-    $usd_to_aud_rate = 1.53; // 🔹 Set your live conversion rate here
-    $price = $price * $usd_to_aud_rate;
+    // print_r($matched_rule);
+    // die;
+
+    if ($matched_rule) {
+        $val  = floatval($matched_rule['value']);
+        $ship = floatval($matched_rule['ship']);
+
+        if ($matched_rule['type'] === 'percent') {
+            $price += $price * ($val / 100);
+        } else {
+            $price += $val;
+        }
+
+        $price += $ship;
+    } else {
+        $price += 5.00; // Default shipping if no rule matched
+    }
 
     return $price;
 }
+
+/**
+ * Helper: Get category depth (how deep in hierarchy it is)
+ */
+function ww_get_category_depth($cat_id)
+{
+    $depth = 0;
+    while ($cat_id) {
+        $term = get_term($cat_id, 'product_cat');
+        if (!$term || !$term->parent) break;
+        $cat_id = $term->parent;
+        $depth++;
+    }
+    return $depth;
+}
+
+add_action('wp_ajax_ww_update_rule', 'ww_update_rule_callback');
+function ww_update_rule_callback()
+{
+    // check_ajax_referer('ww_update_rule_nonce');
+
+    $index = intval($_POST['ww_rule_index']);
+    $value = floatval($_POST['ww_value']);
+
+    $rules = get_option('ww_rules', []);
+    if (!isset($rules[$index])) {
+        wp_send_json_error('Rule not found.');
+    }
+
+    // Update only the value (or you can update type, ship, etc.)
+    $rules[$index]['value'] = $value;
+
+    update_option('ww_rules', $rules);
+
+    // Rebuild HTML for that cell
+    $html = '<span>' . esc_html($value) . '</span>';
+
+    wp_send_json_success(['html' => $html]);
+}
+
 
 /* -------------------------------------------------------------------------
  *  Admin Page
@@ -89,11 +160,26 @@ function ww_admin_category_pricing_page()
             }
         }
 
-        // ✅ If found, update; else add new
-        if (!is_null($existing_index)) {
-            $rules[$existing_index] = $new_rule;
+        if (!empty($_POST['ww_rule_index'])) {
+            $edit_index = intval($_POST['ww_rule_index']);
+            if (isset($rules[$edit_index])) {
+                $rules[$edit_index] = $new_rule;
+            }
         } else {
-            $rules[] = $new_rule;
+            // Otherwise, add/update based on category duplication
+            $existing_index = null;
+            foreach ($rules as $index => $rule) {
+                if (isset($rule['cat']) && $rule['cat'] === $cat) {
+                    $existing_index = $index;
+                    break;
+                }
+            }
+
+            if (!is_null($existing_index)) {
+                $rules[$existing_index] = $new_rule;
+            } else {
+                $rules[] = $new_rule;
+            }
         }
 
         update_option('ww_rules', $rules);
@@ -209,8 +295,8 @@ function ww_admin_category_pricing_page()
             <div class="ww-field">
                 <label for="ww_markup_type" class="ww-label">Markup Type</label>
                 <select name="ww_markup_type" id="ww_markup_type" class="ww-input">
-                    <option value="percent">Percent</option>
                     <option value="fixed">Fixed</option>
+                    <option value="percent">Percent</option>
                 </select>
             </div>
 
@@ -262,10 +348,20 @@ function ww_admin_category_pricing_page()
                         <tr>
                             <td><?= $cat_name; ?></td>
                             <td><?= esc_html($r['type']); ?></td>
-                            <td><?= esc_html($r['value']); ?></td>
+                            <td id='ww_value_<?= esc_attr($offset + $i); ?>'><?= esc_html($r['value']); ?></td>
                             <td>
+                                <a href="#" class="ww-edit"
+                                    data-index="<?= esc_attr($offset + $i); ?>"
+                                    data-cat="<?= esc_attr($r['cat']); ?>"
+                                    data-type="<?= esc_attr($r['type']); ?>"
+                                    data-value="<?= esc_attr($r['value']); ?>"
+                                    data-ship="<?= esc_attr($r['ship'] ?? 0); ?>">Edit</a> |
                                 <a href="<?= esc_url(wp_nonce_url(admin_url('admin.php?page=ww-category-pricing&delete=' . ($offset + $i)), 'ww_delete_rule', 'ww_nonce')); ?>" class="ww-delete">Delete</a>
                             </td>
+
+                            <!-- <td>
+                                <a href="<?= esc_url(wp_nonce_url(admin_url('admin.php?page=ww-category-pricing&delete=' . ($offset + $i)), 'ww_delete_rule', 'ww_nonce')); ?>" class="ww-delete">Delete</a>
+                            </td> -->
                         </tr>
                     <?php endforeach; ?>
                 <?php endif; ?>
@@ -342,8 +438,103 @@ function ww_admin_category_pricing_page()
                 e.preventDefault();
                 if (confirm("Delete this rule?")) location.href = $(this).attr("href");
             });
-            // Expose rules to JS
+
+            $(document).on('click', '#save_btn', function(e) {
+                e.preventDefault();
+
+                const $row = $(this).closest('div');
+                const ruleIndex = $(this).closest('td').attr('id').replace('ww_value_', '');
+                const value = $row.find('input[name="ww_rule_index"]').val();
+
+                $.ajax({
+                    url: ajaxurl, // WordPress admin AJAX endpoint
+                    type: 'POST',
+                    dataType: 'json',
+                    data: {
+                        action: 'ww_update_rule',
+                        ww_rule_index: ruleIndex,
+                        ww_value: value,
+                        // _ajax_nonce: ww_ajax_object.nonce
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            alert('✅ Rule updated successfully!');
+                            // Replace input with updated value
+                            $('#ww_value_' + ruleIndex).html(response.data.html);
+                        } else {
+                            alert('❌ Update failed: ' + response.data);
+                        }
+                    },
+                    error: function() {
+                        alert('⚠️ Error connecting to server.');
+                    }
+                });
+            });
+
+            $(document).on('click', '#cancel_btn', function(e) {
+                e.preventDefault();
+                var index = $(this).data('index');
+                var value = $(this).data('value');
+
+                $('#ww_value_' + index).html(value);
+            });
+
             var ww_rules = <?php echo json_encode(array_values($rules)); ?>;
+            $(document).on("click", ".ww-edit", function(e) {
+                e.preventDefault();
+
+                var index = $(this).data('index');
+                var value = $(this).data('value');
+
+                var field = `
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <input 
+                            type="text" 
+                            name="ww_rule_index" 
+                            value="${value}" 
+                            style="
+                                padding: 5px 8px; 
+                                border: 1px solid #ccc; 
+                                border-radius: 4px; 
+                                font-size: 13px;
+                                width: 80px;
+                            "
+                        />
+                        <button 
+                            id="save_btn" 
+                            style="
+                                background: #0073aa; 
+                                color: #fff; 
+                                border: none; 
+                                border-radius: 4px; 
+                                padding: 5px 10px; 
+                                font-size: 13px;
+                                cursor: pointer;
+                            "
+                        >
+                            Update
+                        </button>
+                        <button 
+                            id="cancel_btn"
+                            data-index="${index}"
+                            data-value="${value}"
+                            style="
+                                background: #ccc; 
+                                color: #000; 
+                                border: none; 
+                                border-radius: 4px; 
+                                padding: 5px 10px; 
+                                font-size: 13px;
+                                cursor: pointer;
+                            "
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                `;
+
+                $('#ww_value_' + index).html(field);
+            });
         });
     </script>
 <?php
