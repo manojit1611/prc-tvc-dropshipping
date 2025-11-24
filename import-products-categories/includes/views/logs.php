@@ -277,13 +277,27 @@ if (!$current_batch) {
             </thead>
             <tbody>
                 <?php if (!empty($batches)) :
+                    global $wpdb;
+                    $logs_table = $wpdb->prefix . 'tvc_product_sync_logs';
                     foreach ($batches as $batch) :
+                        $success_logs = $wpdb->get_var($wpdb->prepare(
+                            "SELECT COUNT(*) FROM $logs_table WHERE batch_id = %s AND status = %d",
+                            $batch->id,
+                            1
+                        ));
+
+                        $failed_logs = $wpdb->get_var($wpdb->prepare(
+                            "SELECT COUNT(*) FROM $logs_table WHERE batch_id = %s AND status = %d",
+                            $batch->id,
+                            0
+                        ));
+
                 ?>
                         <tr>
                             <td><?php echo esc_html(date('Y-m-d H:i', strtotime($batch->created_at))); ?></td>
                             <td><?php echo esc_html($batch->batch_id); ?></td>
-                            <td><?php echo esc_html($batch->total_success); ?></td>
-                            <td><?php echo esc_html($batch->total_failed); ?></td>
+                            <td><?php echo esc_html($success_logs); ?></td>
+                            <td><?php echo esc_html($failed_logs); ?></td>
                             <td>
                                 <?php
                                 switch ($batch->status) {
@@ -474,6 +488,18 @@ if ($current_batch) {
         $status_filter
     ));
 
+    $success_logs = $wpdb->get_var($wpdb->prepare(
+        "SELECT COUNT(*) FROM $logs_table WHERE batch_id = %s AND status = %d",
+        $current_batch,
+        1
+    ));
+
+    $failed_logs = $wpdb->get_var($wpdb->prepare(
+        "SELECT COUNT(*) FROM $logs_table WHERE batch_id = %s AND status = %d",
+        $current_batch,
+        0
+    ));
+
     $query = "SELECT * FROM $logs_table WHERE batch_id = %s";
     $params = [$current_batch];
 
@@ -499,8 +525,8 @@ if ($current_batch) {
 
     echo "<h4>Logs for Batch ID: " . esc_html($batch_details->batch_id) . "</h4>";
 
-    echo "<span><strong>Total Success</strong></span>: " . esc_html($batch_details->total_success) . "</br>";
-    echo "<span><strong>Total Failed</strong><span>: " . esc_html($batch_details->total_failed) . "</br></br>";
+    echo "<span><strong>Total Success</strong></span>: " . esc_html($success_logs) . "</br>";
+    echo "<span><strong>Total Failed</strong><span>: " . esc_html($failed_logs) . "</br></br>";
 
 ?>
     <label><strong>Status</strong></label>

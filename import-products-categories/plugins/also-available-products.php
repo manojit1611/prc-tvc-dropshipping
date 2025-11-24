@@ -115,19 +115,18 @@ function aap_display_links_on_product_page()
     $id = $product->get_id();
     $table = AAP_TABLE;
 
-    $related_ids = $wpdb->get_col($wpdb->prepare("SELECT DISTINCT related_product_id FROM $table WHERE product_id = %d", $id));
-    $related_ids = array_diff(array_unique($related_ids), [$id]); // Avoid self-reference
+    $related_ids = $wpdb->get_col($wpdb->prepare("SELECT related_product_id FROM $table WHERE product_id = %d", $id));
+    $related_ids = array_diff(array_unique($related_ids), [$id]);
 
     $related_ids = $product->get_meta('_related_models') ?? "";
     if (!empty($related_ids)) {
         $related_ids = explode(',', $related_ids);
     }
 
-
     if (empty($related_ids)) return;
 
-
     $finalAvailableProducts = array();
+    $publishedProducts = array();
     foreach ($related_ids as $sku) {
         $rid = wc_get_product_id_by_sku($sku);
         if (empty($rid)) {
@@ -136,8 +135,13 @@ function aap_display_links_on_product_page()
         $wooProduct = wc_get_product($rid);
         if ($wooProduct && $wooProduct->get_status() == 'publish') {
             $finalAvailableProducts[] = $wooProduct;
+            $publishedProducts[] = $wooProduct;
         }
     }
+
+    $publishedProducts = array_slice($finalAvailableProducts, 0, 4);
+
+    $moreCount = max(0, count($finalAvailableProducts) - count($publishedProducts));
 
     if (empty($finalAvailableProducts)) {
         return;
@@ -191,6 +195,12 @@ function aap_display_links_on_product_page()
         .ww-also-available-products ul li.active {
             border-color: var(--wsc);
         }
+
+        .ww-also-available-products ul {
+            display: flex !important;
+            flex-wrap: nowrap;
+            overflow: scroll;
+        }
     </style>
     <div class="ww-also-available-products">
         <h3><?php echo __('Same Model in Different Colors:'); ?></h3>
@@ -198,18 +208,26 @@ function aap_display_links_on_product_page()
             <?php
             $is_single = is_product();
 
-            foreach ($finalAvailableProducts as $p) {
-                $rid = $p->get_id();
-                if ($p && $p->get_status() == 'publish') {
+            foreach ($finalAvailableProducts as $finalProduct) {
+                $rid = $finalProduct->get_id();
+                if ($finalProduct && $finalProduct->get_status() == 'publish') {
                     if ($is_single) {
-                        // Single product page → normal link
-                        echo '<li><a href="' . get_permalink($rid) . '">' . $p->get_image('woocommerce_thumbnail') . '</a></li>';
-                    } else {
-                        // Shop/archive/product card → AJAX update
-                        echo '<li><a href="#" class="ww-change-product" data-product-id="' . esc_attr($rid) . '">'
-                            . $p->get_image('woocommerce_thumbnail') . '</a></li>';
+                        echo '<li><a href="' . get_permalink($rid) . '">' . $finalProduct->get_image('woocommerce_thumbnail') . '</a></li>';
                     }
                 }
+            }
+            foreach ($publishedProducts as $publishedProducts) {
+                $rid = $publishedProducts->get_id();
+                if ($publishedProducts && $publishedProducts->get_status() == 'publish') {
+                    if (!$is_single) {
+                        echo '<li><a href="#" class="ww-change-product" data-product-id="' . esc_attr($rid) . '">'
+                            . $publishedProducts->get_image('woocommerce_thumbnail') . '</a></li>';
+                    }
+                }
+            }
+
+            if (!$is_single && $moreCount > 1) {
+                echo '<li><a style="justify-content:center;" href="' . get_permalink($rid) . '">+' . $moreCount . '</a></li>';
             }
             ?>
         </ul>

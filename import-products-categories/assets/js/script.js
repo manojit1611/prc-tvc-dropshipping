@@ -1,10 +1,5 @@
 jQuery(document).ready(function ($) {
-  const urlParams = new URLSearchParams(window.location.search);
-  const myParam = urlParams.get("taxonomy");
-  if (myParam == "device_heirarchy") {
-    $("#parent").addClass("select2").select2();
-  }
-
+  // On change of any category dropdown
   $(document).on("change", ".importer select", function () {
     let slug = $(this).val();
     let container = $("#child-category-container");

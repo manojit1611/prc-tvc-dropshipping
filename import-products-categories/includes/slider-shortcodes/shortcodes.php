@@ -1,4 +1,5 @@
 <?php
+
 /**
  * WooCommerce Owl Carousel Slider & Tabs
  * Single slider version using ob_start() / ob_get_clean()
@@ -23,7 +24,7 @@ function custom_wc_slider_init_js()
 {
     ob_start(); ?>
     <script>
-        jQuery(document).ready(function ($) {
+        jQuery(document).ready(function($) {
 
             // make element compatible with owl slider
             $('.woo-owl-slider ul.products').addClass('owl-carousel owl-theme');
@@ -35,9 +36,6 @@ function custom_wc_slider_init_js()
                 margin: 10,
                 nav: false,
                 dots: true,
-                autoplayHoverPause: true,
-                autoplay: true,
-                autoplayTimeout: 2000,
                 responsive: {
                     0: {
                         items: 2
@@ -60,32 +58,44 @@ function custom_wc_slider_init_js()
                 margin: 10,
                 nav: false,
                 dots: true,
-                autoplayHoverPause: true,
-                autoplay: true,
-                autoplayTimeout: 2000,
                 responsive: {
-                    0: {items: 2},
-                    600: {items: 3},
-                    768: {items: 5},
-                    1200: {items: 6}
+                    0: {
+                        items: 2
+                    },
+                    600: {
+                        items: 3
+                    },
+                    768: {
+                        items: 5
+                    },
+                    1200: {
+                        items: 5
+                    }
                 }
             });
 
             // Product Slider Common
             $('.woo-owl-slider ul.products').owlCarousel({
                 loop: true,
-                margin: 16,
+                margin: 20,
                 nav: true,
                 dots: false,
-                autoplayHoverPause: true,
-                autoplay: true,
-                autoplayTimeout: 2000,
                 responsive: {
-                    0: {items: 2},
-                    600: {items: 3},
-                    768: {items: 4},
-                    1024: {items: 5},
-                    1200: {items: 5}
+                    0: {
+                        items: 2
+                    },
+                    600: {
+                        items: 3
+                    },
+                    768: {
+                        items: 4
+                    },
+                    1024: {
+                        items: 5
+                    },
+                    1200: {
+                        items: 6
+                    }
                 }
             });
 
@@ -100,7 +110,7 @@ function custom_wc_slider_init_js()
             });
         });
     </script>
-    <?php
+<?php
     echo ob_get_clean();
 }
 
@@ -113,7 +123,6 @@ function custom_wc_slider_styles()
 {
     ob_start(); ?>
     <style>
-
         .products.owl-carousel {
             display: flex !important;
             width: 100% !important;
@@ -122,6 +131,20 @@ function custom_wc_slider_styles()
             gap: 0 !important;
         }
 
+        .ww-product-section__items-area {
+            overflow: hidden;
+        }
+
+        .ww-product-section {
+            margin-top: 40px;
+        }
+
+        .ww-product-section__entry-heading {
+            text-align: center;
+            margin-bottom: 1.5rem;
+        }
+
+        @media screen and (max-width: 1023px) {}
 
         .owl-carousel .owl-nav {
             left: 0;
@@ -179,7 +202,8 @@ function custom_wc_slider_styles()
             transition: all .3s;
         }
 
-        .custom-tabs-nav li:hover, .custom-tabs-nav li.active {
+        .custom-tabs-nav li:hover,
+        .custom-tabs-nav li.active {
             background: #0073aa;
             color: #fff;
         }
@@ -206,13 +230,14 @@ function custom_wc_slider_styles()
                 opacity: 0;
                 transform: translateY(5px);
             }
+
             to {
                 opacity: 1;
                 transform: translateY(0);
             }
         }
     </style>
-    <?php
+<?php
     echo ob_get_clean();
 }
 
@@ -226,15 +251,15 @@ add_action('wp_head', 'custom_wc_slider_styles');
 function custom_wc_product_slider_shortcode($atts)
 {
     ob_start(); ?>
-    <div class="woo-owl-slider woo-products ">
-        <div>
-            <h2><?php echo __('Recent Products') ?></h2>
+    <div class="woo-owl-slider woo-products ww-product-section">
+        <div class="ww-product-section__entry-heading">
+            <h4><?php echo __('Recent Products') ?></h4>
         </div>
-        <div class="">
+        <div class="ww-product-section__items-area">
             <?php echo do_shortcode('[recent_products per_page="8" columns="4"]'); ?>
         </div>
     </div>
-    <?php
+<?php
     return ob_get_clean();
 }
 
@@ -244,12 +269,15 @@ add_shortcode('recent_product_slider', 'custom_wc_product_slider_shortcode');
 function custom_wc_best_seller_slider_shortcode($atts)
 {
     ob_start(); ?>
-    <div class="woo-owl-slider woo-products ">
-        <div>
+    <div class="woo-owl-slider woo-products ww-product-section">
+        <div class="ww-product-section__entry-heading">
+            <h4>Best Selling Products</h4>
+        </div>
+        <div class="ww-product-section__items-area">
             <?php echo do_shortcode('[best_selling_products per_page="8" columns="4"]'); ?>
         </div>
     </div>
-    <?php
+<?php
     return ob_get_clean();
 }
 
@@ -260,14 +288,17 @@ function custom_new_arrival_slider_shortcode($atts)
 {
     $loop = new WP_Query(['post_type' => 'product', 'posts_per_page' => 8, 'post_status' => 'publish']);
     ob_start(); ?>
-    <div class="woo-owl-slider woo-products ">
-        <div class="">
+    <div class="woo-owl-slider woo-products ww-product-section">
+        <div class="ww-product-section__entry-heading">
+            <h4>New Arrivals</h4>
+        </div>
+        <div class="ww-product-section__items-area">
             <?php
             echo do_shortcode('[products limit="8" columns="4" orderby="id" order="DESC" visibility="visible"]');
             ?>
         </div>
     </div>
-    <?php
+<?php
     return ob_get_clean();
 }
 
@@ -277,9 +308,12 @@ add_shortcode('new_arrival', 'custom_new_arrival_slider_shortcode');
 function custom_wc_category_slider_shortcode($atts)
 {
     ob_start(); ?>
-    <div class="woo-owl-slider-categories">
-        <div class="">
-            <?php echo do_shortcode('[product_categories limit=8]'); ?>
+    <div class="woo-owl-slider-categories ww-product-section">
+        <div class="ww-product-section__entry-heading">
+            <h4>Featured Categories</h4>
+        </div>
+        <div class="ww-product-section__items-area">
+            <?php echo do_shortcode('[product_categories ids="69, 102, 103, 59, 100, 87" limit="10"]'); ?>
         </div>
     </div>
     <?php
@@ -297,7 +331,7 @@ function custom_wc_specific_category_slider_shortcode($atts)
         echo '<p>Please provide a category.</p>';
     } else { ?>
         <div class="woo-owl-slider woo-products">
-            <h2><?php echo esc_html($atts['title']); ?></h2>
+            <h4><?php echo esc_html($atts['title']); ?></h4>
             <?php echo do_shortcode('[product_category category="' . esc_attr($atts['category']) . '"]'); ?>
         </div>
     <?php }
@@ -327,8 +361,11 @@ function custom_wc_all_brands_shortcode($atts)
 
     if (!empty($brands) && !is_wp_error($brands)) { ?>
 
-        <div class="ww-brands-section ">
-            <div class="">
+        <div class="ww-brands-section ww-product-section">
+            <div class="ww-product-section__entry-heading">
+                <h4><?php echo esc_html($atts['title']); ?></h4>
+            </div>
+            <div class="ww-product-section__items-area">
                 <ul class="woo-owl-brand-slider owl-carousel owl-theme ww-brands-row">
                     <?php foreach ($brands as $brand):
                         echo '<li class="brand-slide">';
@@ -338,12 +375,12 @@ function custom_wc_all_brands_shortcode($atts)
                         <div class="brand-item">
                             <a href="<?php echo esc_url($link); ?>">
                                 <img src="<?php echo esc_url($img_url); ?>"
-                                     alt="<?php echo esc_attr($brand->name); ?>"
-                                     style="max-width:100%;">
+                                    alt="<?php echo esc_attr($brand->name); ?>"
+                                    style="max-width:100%;">
                                 <h5><?php echo esc_html($brand->name); ?></h5>
                             </a>
                         </div>
-                        <?php
+                    <?php
                         echo '</li>';
                     endforeach; ?>
                 </ul>
@@ -371,14 +408,14 @@ function custom_tabs_shortcode($atts, $content = null)
         </ul>
         <div class="custom-tabs-content">
             <div class="tab-content active"
-                 id="tab1"><?php echo do_shortcode('[best_seller_product_slider per_page="4" columns="4"]'); ?></div>
+                id="tab1"><?php echo do_shortcode('[best_seller_product_slider per_page="4" columns="4"]'); ?></div>
             <div class="tab-content"
-                 id="tab2"><?php echo do_shortcode('[new_arrival per_page="4" columns="4"]'); ?></div>
+                id="tab2"><?php echo do_shortcode('[new_arrival per_page="4" columns="4"]'); ?></div>
         </div>
     </div>
     <script>
-        jQuery(document).ready(function ($) {
-            $('#<?php echo esc_js($tabs_id); ?> .custom-tabs-nav li').click(function () {
+        jQuery(document).ready(function($) {
+            $('#<?php echo esc_js($tabs_id); ?> .custom-tabs-nav li').click(function() {
                 var tab = $(this).data('tab');
                 var wrapper = $(this).closest('.custom-tabs-wrapper');
                 wrapper.find('.custom-tabs-nav li').removeClass('active');
@@ -388,7 +425,7 @@ function custom_tabs_shortcode($atts, $content = null)
             });
         });
     </script>
-    <?php
+<?php
     return ob_get_clean();
 }
 

@@ -42,6 +42,7 @@ function ww_tvc_last_updated_products_pull_callback(WP_REST_Request $request)
         'endDate' => $endDate,
         'import_batch_id' => null,
         'batch_name' => $generated_batch_id,
+        'modified_start' => $beginDate,
     ];
 
     /**
@@ -62,20 +63,18 @@ function ww_tvc_last_updated_products_pull_callback(WP_REST_Request $request)
     $is_running = get_option('tvc_auto_product_pull_running', false);
 
     if (!$is_running) {
-        update_auto_pull_data($import_batch_id, $params);
+        // Mark as running before scheduling
+        update_option('tvc_auto_product_pull_running', true, false);
 
-        // // Mark as running before scheduling
-        // update_option('tvc_auto_product_pull_running', true, false);
+        // 🔹 Schedule background job
+        as_schedule_single_action(
+            time(),
+            'ww_import_product_batch',
+            [$import_batch_id, $params]
+        );
 
-        // // 🔹 Schedule background job
-        // as_schedule_single_action(
-        //     time(),
-        //     'ww_import_product_batch',
-        //     [$import_batch_id, $params]
-        // );
-
-        // // Update the last sync start time
-        // update_option('tvc_last_sync_time', $endDate, false);
+        // Update the last sync start time
+        update_option('tvc_last_sync_time', $endDate, false);
 
         $message = 'New import batch started successfully.';
     } else {

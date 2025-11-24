@@ -187,15 +187,28 @@ function ww_admin_category_pricing_page()
         echo '<div class="updated"><p>Rule saved successfully.</p></div>';
     }
 
-    // Delete
     if (isset($_GET['delete']) && check_admin_referer('ww_delete_rule', 'ww_nonce')) {
         $id = intval($_GET['delete']);
         if (isset($rules[$id])) {
             unset($rules[$id]);
             update_option('ww_rules', array_values($rules));
         }
-        echo '<div class="updated"><p>Rule deleted.</p></div>';
+
+        // Redirect after deletion
+        wp_redirect('https://warehouse.prcrepair.com.au/wp-admin/admin.php?page=ww-category-pricing');
+        exit;
     }
+
+
+    // Delete
+    // if (isset($_GET['delete']) && check_admin_referer('ww_delete_rule', 'ww_nonce')) {
+    //     $id = intval($_GET['delete']);
+    //     if (isset($rules[$id])) {
+    //         unset($rules[$id]);
+    //         update_option('ww_rules', array_values($rules));
+    //     }
+    //     echo '<div class="updated"><p>Rule deleted.</p></div>';
+    // }
 
     // Get top-level parents
     $parents = get_terms(['taxonomy' => 'product_cat', 'hide_empty' => false, 'parent' => 0]);

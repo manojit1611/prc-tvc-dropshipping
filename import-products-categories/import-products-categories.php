@@ -403,7 +403,8 @@ register_activation_hook(__FILE__, 'tvc_plugin_create_tables');
 add_action('woocommerce_after_shop_loop_item_title', 'custom_section_above_add_to_cart', 15);
 function custom_section_above_add_to_cart()
 {
-    aap_display_links_on_product_page();
+    $moreCount = 0;
+    aap_display_links_on_product_page($moreCount);
 }
 
 add_action('wp_ajax_ww_get_product_data', 'ww_get_product_data');
@@ -584,3 +585,27 @@ function ww_save_item_specific_markup($item, $cart_item_key, $values, $order)
     }
 }
 
+
+
+// 1. Display custom field in Shipping tab
+add_action('woocommerce_product_options_shipping', function () {
+
+    woocommerce_wp_text_input([
+        'id'          => 'tvc_shipping_cost',
+        'label'       => __('TVC Shipping Cost', 'woocommerce'),
+        'description' => __('Custom shipping cost for this product.', 'woocommerce'),
+        'desc_tip'    => true,
+        'type'        => 'number',
+        'custom_attributes' => [
+            'step' => '0.01',
+            'min'  => '0',
+        ],
+    ]);
+});
+
+// 2. Save the field value
+add_action('woocommerce_admin_process_product_object', function ($product) {
+    if (isset($_POST['tvc_shipping_cost'])) {
+        $product->update_meta_data('tvc_shipping_cost', sanitize_text_field($_POST['tvc_shipping_cost']));
+    }
+});

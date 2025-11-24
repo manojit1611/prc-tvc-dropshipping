@@ -94,8 +94,6 @@ class MPI_Importer
                 'show_ui' => true,
                 'show_admin_column' => true,
                 'query_var' => true,
-                // Base slug will be overridden dynamically per manufacturer
-                // 'rewrite' => array('slug' => 'manufacturer', 'with_front' => false, 'hierarchical' => true),
             )
         );
     }
@@ -236,6 +234,11 @@ class MPI_Importer
                         tvc_sync_log('Category Code does not exist ' . $tvc_product_data['CatalogCode'] . ' for product: ' . $sku, 'tvc-product-category');
                         continue;
                     }
+                }
+
+                if ($tvc_product_data['MinimumOrderQuantity'] > 1) {
+                    tvc_sync_log($sku . ' product skipped due to MOQ greater than 1', 'tvc-product-api');
+                    continue;
                 }
 
                 // save base details

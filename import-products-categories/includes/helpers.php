@@ -89,17 +89,17 @@ function ww_tvc_get_manufacturer_type()
 /**
  * Check if a WooCommerce product category exists by meta key
  *
- * @param string $code  The value of _tvc_product_cat_code to search for.
+ * @param string $code The value of _tvc_product_cat_code to search for.
  * @return int|false    Term ID if found, false if not found.
  */
 function category_exists_by_code($code)
 {
     $term = get_terms(array(
-        'taxonomy'   => 'product_cat',
+        'taxonomy' => 'product_cat',
         'hide_empty' => false,
         'meta_query' => array(
             array(
-                'key'   => '_tvc_product_cat_code',
+                'key' => '_tvc_product_cat_code',
                 'value' => $code,
             )
         ),
@@ -107,37 +107,79 @@ function category_exists_by_code($code)
         'fields' => 'ids'
     ));
 
-    if (! empty($term) && ! is_wp_error($term)) {
+    if (!empty($term) && !is_wp_error($term)) {
         return $term[0]; // return term_id
     }
 
     return false;
 }
 
-function get_device_heirarchy_types()
-{
-    $headings = [
-        1 => 'Select Manufacturer',
-        2 => 'Select Your Device Type',
-        3 => 'Select Your Device Series',
-        4 => 'Select Your Device'
-    ];
 
-    return $headings;
-}
-
-function update_auto_pull_data($import_batch_id, $params)
+/**
+ * @param $import_batch_id
+ * @param $params
+ * @return void
+ * ww_tvc_schedule_auto_pull_based_on_time_frame
+ * This will schedule auto pull based on time frame
+ * Ex: Pull updated products every last 15 minutes
+ *
+ */
+function ww_tvc_schedule_auto_pull_based_on_time_frame($import_batch_id, $params)
 {
     // Mark as running before scheduling
     update_option('tvc_auto_product_pull_running', true, false);
 
     // 🔹 Schedule background job
     as_schedule_single_action(
-        time(),
+        time() + 10,
         'ww_import_product_batch',
         [$import_batch_id, $params]
     );
-
     // Update the last sync start time
     update_option('tvc_last_sync_time', $params['endDate'], false);
+}
+
+
+/**
+ * @param $batch_id
+ * @return array|object|stdClass|null
+ * ww_get_batch_details
+ * Get Single batch details
+ */
+function ww_get_batch_details($batch_id)
+{
+    global $wpdb;
+
+    $row = $wpdb->get_row(
+        $wpdb->prepare(
+            "SELECT * FROM {$wpdb->prefix}tvc_import_batches 
+            where id = %d
+         ORDER BY id DESC 
+         LIMIT 1",
+            $batch_id
+        ),
+        ARRAY_A
+    );
+
+    return $row;
+}
+
+
+/**
+ * @param $currentBatchData
+ * @return void
+ * ww_action_schedule_already_in_queue_auto_pull_batch
+ * this will check if any other auto pull batch is pending
+ * if yes then reschedule the next batch based on the time frame
+ * $currentBatchData == will be auto pull batch data which was running before
+ */
+function ww_action_schedule_already_in_queue_auto_pull_batch($currentBatchData)
+{
+    // get batch data if any other auto pull batch is pending
+    $upcomingBatchData = ww_get_upcoming_auto_pull_batch_details($currentBatchData['created_at']);
+    if (!empty($upcomingBatchData)) {
+        $params = $upcomingBatchData ? json_decode($upcomingBatchData['current_args']) : [];
+        // Reschedule the next batch based on the time frame
+        ww_tvc_schedule_auto_pull_based_on_time_frame($upcomingBatchData['id'], $params);
+    }
 }
